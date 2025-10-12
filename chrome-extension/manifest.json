@@ -8,6 +8,7 @@
     "contextMenus",
     "notifications",
     "webRequest",
+    "webNavigation",
     "sidePanel"
   ],
   "host_permissions": [

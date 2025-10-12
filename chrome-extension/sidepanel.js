@@ -26,7 +26,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupEventListeners() {
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('refreshBtn').addEventListener('click', loadDetectedUrls);
-  document.getElementById('refreshJobsBtn').addEventListener('click', loadRecentJobs);
+
+  // Listen for tab updates (navigation, reload, etc.)
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // When page finishes loading, refresh detected URLs
+    if (changeInfo.status === 'complete') {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0] && tabs[0].id === tabId) {
+          // Only refresh if it's the current active tab
+          loadDetectedUrls();
+        }
+      });
+    }
+  });
+
+  // Listen for storage changes to auto-update when new URLs are detected
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.detectedUrls) {
+      loadDetectedUrls();
+    }
+  });
 }
 
 // Open settings page

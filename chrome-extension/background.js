@@ -54,6 +54,16 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   delete currentTabUrls[tabId];
 });
 
+// Clear detected URLs when page navigates or reloads
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId === 0) { // Only for main frame
+    // Clear URLs for this tab on navigation/reload
+    currentTabUrls[details.tabId] = [];
+    updateBadge(details.tabId);
+    chrome.storage.local.set({ detectedUrls: Array.from(detectedUrls) });
+  }
+});
+
 // Create context menu
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({

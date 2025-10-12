@@ -120,7 +120,7 @@ chrome2nas-m3u8/
 **Quick setup:**
 ```bash
 # 1. Clone repository
-git clone https://github.com/yourusername/chrome2nas-m3u8.git
+git clone https://github.com/asdfghj1237890/chrome2nas-m3u8.git
 cd chrome2nas-m3u8/docker
 
 # 2. Create .env file with your credentials
@@ -232,8 +232,8 @@ MIT License - See LICENSE file for details
 
 ## Support
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/chrome2nas-m3u8/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/chrome2nas-m3u8/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/asdfghj1237890/chrome2nas-m3u8/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/asdfghj1237890/chrome2nas-m3u8/discussions)
 - 📧 **Security**: See [SECURITY.md](SECURITY.md) for reporting vulnerabilities
 
 ---

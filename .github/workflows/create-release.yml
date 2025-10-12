@@ -19,13 +19,13 @@ jobs:
 
       - name: 'Create docker package'
         run: |
-          cd docker
-          zip -r ../chrome2nas-m3u8-docker.zip .
+          cd m3u8-downloader
+          zip -r ../chrome2nas-m3u8-downloader-docker.zip .
 
       - name: 'Create Release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             chrome2nas-m3u8-chrome-extension.zip
-            chrome2nas-m3u8-docker.zip
+            chrome2nas-m3u8-downloader-docker.zip
           generate_release_notes: true

@@ -29,10 +29,21 @@ Complete installation guide for Chrome2NAS M3U8 Downloader.
 
 ## Quick Start
 
-### 1. Clone Repository
+### 1. Download and Extract Release
 ```bash
-git clone https://github.com/yourusername/chrome2nas-m3u8.git
-cd chrome2nas-m3u8/docker
+# Download the latest release
+wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
+
+# Create docker directory and extract
+mkdir -p docker
+cd docker
+unzip ../chrome2nas-m3u8-downloader-docker.zip
+
+# Verify directory structure
+ls -la m3u8-downloader/
+# Should show: docker/, db_data/, logs/, redis_data/
+
+cd m3u8-downloader/docker
 ```
 
 ### 2. Configure Environment
@@ -103,9 +114,14 @@ docker logs m3u8_worker
 # SSH into your Synology
 ssh your-username@synology-ip
 
-# Create directories
-sudo mkdir -p /volume1/docker/m3u8-downloader
-sudo mkdir -p /volume1/xxxxyyyy-m3u8/downloads/{completed,processing,failed}
+# Create main docker directory
+sudo mkdir -p /volume1/docker
+
+# Create download directories
+sudo mkdir -p /volume1/xxxxx/downloads/{completed,processing,failed}
+
+# Set proper permissions for download directories (adjust user:group as needed)
+sudo chown -R 1026:100 /volume1/xxxxx/downloads
 ```
 
 > **⚠️ Important: Download Folder Configuration**
@@ -121,17 +137,30 @@ sudo mkdir -p /volume1/xxxxyyyy-m3u8/downloads/{completed,processing,failed}
 >   - `failed/` - Failed downloads for review
 > - If you change the download location, ensure these subdirectories exist before starting the services.
 
-### Step 4: Upload Project Files
+### Step 4: Download and Extract Release
 
-**Option A: Using File Station**
-1. Download project ZIP from GitHub
-2. Extract locally
-3. Upload `docker` folder to `/volume1/docker/m3u8-downloader/`
+**Option A: Using File Station (Recommended)**
+1. Download `chrome2nas-m3u8-downloader-docker.zip` from [GitHub Releases](https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest)
+2. Upload the ZIP file to `/volume1/docker/` using File Station
+3. Extract the ZIP file in `/volume1/docker/`
+4. Verify the structure:
+   ```
+   /volume1/docker/m3u8-downloader/
+   ├── docker/          # Contains docker-compose files
+   ├── db_data/         # Database data directory
+   ├── logs/            # Application logs directory
+   └── redis_data/      # Redis data directory
+   ```
 
-**Option B: Using Git (if available)**
+**Option B: Using SSH**
 ```bash
 cd /volume1/docker
-git clone https://github.com/yourusername/chrome2nas-m3u8.git m3u8-downloader
+wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
+unzip chrome2nas-m3u8-downloader-docker.zip
+rm chrome2nas-m3u8-downloader-docker.zip
+
+# Set proper permissions
+sudo chown -R 1026:100 /volume1/docker/m3u8-downloader
 ```
 
 ### Step 5: Configure Environment
@@ -201,15 +230,16 @@ sudo usermod -aG docker $USER
 sudo apt-get update
 sudo apt-get install docker-compose-plugin
 
-# Clone project
-git clone https://github.com/yourusername/chrome2nas-m3u8.git
-cd chrome2nas-m3u8/docker
+# Download and extract release
+wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
+mkdir -p docker OR cd docker
+unzip ../chrome2nas-m3u8-downloader-docker.zip
+
+# Navigate to docker configuration
+cd m3u8-downloader/docker
 
 # Configure environment (see Quick Start section)
 # Create .env file with your settings
-
-# Create download folder structure
-mkdir -p ../downloads/{completed,processing,failed}
 
 # Deploy
 docker-compose up -d
@@ -297,7 +327,7 @@ curl http://YOUR_NAS_IP:52052/api/jobs \
 docker logs -f m3u8_worker
 
 # Check for completed downloads
-ls -lh /volume1/downloads/m3u8/completed/
+ls -lh /volume1/xxxxx/downloads/completed/
 ```
 
 ### Test 5: Use Chrome Extension
@@ -359,7 +389,7 @@ docker logs m3u8_worker
 df -h
 
 # 4. Permission issues
-ls -ld /volume1/downloads/m3u8/
+ls -ld /volume1/xxxxx/downloads/
 ```
 
 ### Issue: Slow Performance

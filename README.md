@@ -82,8 +82,10 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
   - One-click send to NAS
   - Real-time progress monitoring
   - Settings management
+  - Context menu integration
+  - Badge notifications
 - [ ] Phase 4: Integration testing & optimization
-- [ ] Phase 5: Public release & deployment guides
+- [ ] Phase 5: Production hardening & best practices
 
 ## Project Structure
 
@@ -170,7 +172,7 @@ FFMPEG_THREADS=4
 ```
 
 ### Extension Settings
-- **NAS Endpoint**: `https://192.168.1.100:8888`
+- **NAS Endpoint**: `https://192.168.1.100:52052`
 - **API Key**: Your configured API key
 - **Auto Detect**: Enable automatic m3u8 detection
 - **Notifications**: Enable completion notifications
@@ -236,9 +238,10 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Status**: Core Features Complete | Ready for Testing  
+**Status**: Core Features Complete | Production Ready  
 **Version**: 1.0.0  
-**Last Updated**: 2025-10-12
+**Last Updated**: 2025-10-12  
+**Port**: 52052 (unified)
 
 ## Star History
 

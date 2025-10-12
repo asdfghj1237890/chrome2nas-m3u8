@@ -1,0 +1,33 @@
+name: Docker Build Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build API Image
+      run: |
+        cd docker/api
+        docker build -t chrome2nas-api:test .
+    
+    - name: Build Worker Image
+      run: |
+        cd docker/worker
+        docker build -t chrome2nas-worker:test .
+    
+    - name: Test Docker Compose Configuration
+      run: |
+        cd docker
+        docker-compose config
+

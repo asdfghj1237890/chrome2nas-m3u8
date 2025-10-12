@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chrome2NAS M3U8 Downloader Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎬 Chrome2NAS M3U8 Downloader</h1>
+      <p class="subtitle">Configure your NAS connection</p>
+    </header>
+
+    <main>
+      <div class="card">
+        <h2>NAS Configuration</h2>
+        
+        <div class="form-group">
+          <label for="nasEndpoint">
+            NAS Endpoint URL
+            <span class="required">*</span>
+          </label>
+          <input 
+            type="text" 
+            id="nasEndpoint" 
+            placeholder="http://192.168.1.100:52052"
+            autocomplete="off"
+          >
+          <p class="help-text">
+            Format: <code>http://YOUR_NAS_IP:PORT</code><br>
+            Example: <code>http://192.168.50.181:52052</code>
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="apiKey">
+            API Key
+            <span class="required">*</span>
+          </label>
+          <input 
+            type="password" 
+            id="apiKey" 
+            placeholder="Enter your API key"
+            autocomplete="off"
+          >
+          <p class="help-text">
+            Find this in your NAS <code>.env</code> file
+          </p>
+        </div>
+
+        <div class="form-actions">
+          <button id="testBtn" class="btn-secondary">🔍 Test Connection</button>
+          <button id="saveBtn" class="btn-primary">💾 Save Settings</button>
+        </div>
+
+        <div id="statusMessage" class="status-message" style="display: none;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Download Preferences</h2>
+        
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="autoDetect" checked>
+            Auto-detect M3U8 URLs
+          </label>
+          <p class="help-text">
+            Automatically detect M3U8 URLs when browsing
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="showNotifications" checked>
+            Show notifications
+          </label>
+          <p class="help-text">
+            Show notifications when download is submitted
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>About</h2>
+        <p><strong>Version:</strong> 1.0.0</p>
+        <p><strong>Author:</strong> Chrome2NAS Team</p>
+        <p class="help-text">
+          This extension allows you to send M3U8 video streams directly to your NAS for download.
+        </p>
+        
+        <div class="info-box">
+          <h3>📖 How to use:</h3>
+          <ol>
+            <li>Configure your NAS endpoint and API key above</li>
+            <li>Browse to a video streaming website</li>
+            <li>M3U8 URLs will be detected automatically</li>
+            <li>Click the extension icon to see detected URLs</li>
+            <li>Click "Send to NAS" to start downloading</li>
+          </ol>
+        </div>
+
+        <div class="info-box">
+          <h3>🔧 Need help?</h3>
+          <p>
+            • Check your NAS is accessible from this computer<br>
+            • Verify API port is correct (default: 52052)<br>
+            • Ensure API key matches your NAS configuration<br>
+            • Check firewall settings on your NAS
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>Chrome2NAS M3U8 Downloader © 2025</p>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

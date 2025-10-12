@@ -1,0 +1,120 @@
+name: m3u8-downloader
+
+version: '3.8'
+
+# Synology NAS Optimized Configuration
+# For use with Synology Container Manager (formerly Docker)
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: m3u8_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
+      POSTGRES_DB: m3u8_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /volume1/docker/m3u8-downloader/db_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    #ports:
+    #  - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - m3u8_network
+    user: "1026:100"  # Synology user:group (adjust as needed)
+
+  # Redis Queue
+  redis:
+    image: redis:7-alpine
+    container_name: m3u8_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --save 60 1
+    volumes:
+      - /volume1/docker/m3u8-downloader/redis_data:/data
+    #ports:
+    #  - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - m3u8_network
+
+  # API Gateway (FastAPI)
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: m3u8_api
+    restart: unless-stopped
+    environment:
+      - API_KEY=${API_KEY:-change-this-key}
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-10}
+      - STORAGE_PATH=/downloads
+    volumes:
+      - /volume1/nsfw_video/m3u8-downloader/downloads:/downloads
+      - /volume1/docker/m3u8-downloader/logs:/logs
+    ports:
+      - "52052:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - m3u8_network
+    user: "1026:100"  # Match your Synology user
+
+  # Download Worker
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: m3u8_worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
+      - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+      - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
+      - STORAGE_PATH=/downloads
+    volumes:
+      - /volume1/nsfw_video/m3u8-downloader/downloads:/downloads
+      - /volume1/docker/m3u8-downloader/logs:/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - m3u8_network
+    user: "1026:100"  # Match your Synology user
+
+networks:
+  m3u8_network:
+    driver: bridge
+
+# Note: Synology manages volumes through host paths
+# No named volumes used to avoid permission issues
+

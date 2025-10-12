@@ -239,7 +239,7 @@ MIT License - See LICENSE file for details
 ---
 
 **Status**: Core Features Complete | Production Ready  
-**Version**: 1.0.0  
+**Version**: 1.0.1  
 **Last Updated**: 2025-10-12  
 **Port**: 52052 (unified)
 

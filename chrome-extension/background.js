@@ -175,7 +175,13 @@ async function storeJob(job) {
   await chrome.storage.local.set({ jobs: jobList });
 }
 
-// Listen for messages from popup
+// Listen for action clicks to open sidepanel
+chrome.action.onClicked.addListener(async (tab) => {
+  // Open sidepanel when extension icon is clicked
+  await chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// Listen for messages from sidepanel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getDetectedUrls') {
     // Return URLs for current active tab
@@ -189,12 +195,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true; // Keep channel open for async response
   }
-  
+
   if (request.action === 'sendToNAS') {
     sendToNAS(request.url, request.title, request.pageUrl);
     sendResponse({ success: true });
   }
-  
+
   if (request.action === 'clearDetected') {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
@@ -204,6 +210,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     sendResponse({ success: true });
   }
+
 });
 
 console.log('Chrome2NAS M3U8 Downloader background service worker loaded');

@@ -1,23 +1,23 @@
-// Popup Script for Chrome2NAS M3U8 Downloader
+// Sidepanel Script for Chrome2NAS M3U8 Downloader
 
 let settings = {};
 let detectedUrls = [];
 let jobs = [];
 
-// Initialize popup
+// Initialize sidepanel
 document.addEventListener('DOMContentLoaded', async () => {
   // Load settings
   settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey']);
-  
+
   // Check connection
   checkConnection();
-  
+
   // Load detected URLs
   loadDetectedUrls();
-  
+
   // Load recent jobs
-  loadRecentJobs();
-  
+  await loadRecentJobs();
+
   // Setup event listeners
   setupEventListeners();
 });
@@ -25,10 +25,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Setup event listeners
 function setupEventListeners() {
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
-  document.getElementById('openOptionsBtn').addEventListener('click', openSettings);
   document.getElementById('refreshBtn').addEventListener('click', loadDetectedUrls);
   document.getElementById('refreshJobsBtn').addEventListener('click', loadRecentJobs);
-  document.getElementById('clearBtn').addEventListener('click', clearRecords);
 }
 
 // Open settings page
@@ -41,14 +39,14 @@ async function checkConnection() {
   const statusElement = document.getElementById('connectionStatus');
   const statusText = document.getElementById('statusText');
   const statusIcon = document.getElementById('statusIcon');
-  
+
   if (!settings.nasEndpoint || !settings.apiKey) {
     statusElement.className = 'status-bar disconnected';
     statusText.textContent = 'Not configured';
     statusIcon.textContent = '⚠️';
     return;
   }
-  
+
   try {
     const response = await fetch(`${settings.nasEndpoint}/api/health`, {
       method: 'GET',
@@ -56,7 +54,7 @@ async function checkConnection() {
         'Authorization': `Bearer ${settings.apiKey}`
       }
     });
-    
+
     if (response.ok) {
       statusElement.className = 'status-bar connected';
       statusText.textContent = 'Connected to NAS';
@@ -82,7 +80,7 @@ function loadDetectedUrls() {
 // Render detected URLs
 function renderDetectedUrls() {
   const listElement = document.getElementById('detectedUrlsList');
-  
+
   if (detectedUrls.length === 0) {
     listElement.innerHTML = `
       <div class="empty-state">
@@ -92,7 +90,7 @@ function renderDetectedUrls() {
     `;
     return;
   }
-  
+
   listElement.innerHTML = detectedUrls.map((urlInfo, index) => `
     <div class="url-item">
       <div class="url-title">M3U8 URL ${index + 1}</div>
@@ -107,7 +105,7 @@ function renderDetectedUrls() {
       </div>
     </div>
   `).join('');
-  
+
   // Add event listeners to buttons
   listElement.querySelectorAll('.btn-send').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -116,7 +114,7 @@ function renderDetectedUrls() {
       sendToNAS(url, pageUrl);
     });
   });
-  
+
   listElement.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const url = e.target.dataset.url;
@@ -130,14 +128,14 @@ async function loadRecentJobs() {
   if (!settings.nasEndpoint || !settings.apiKey) {
     return;
   }
-  
+
   try {
     const response = await fetch(`${settings.nasEndpoint}/api/jobs?limit=10`, {
       headers: {
         'Authorization': `Bearer ${settings.apiKey}`
       }
     });
-    
+
     if (response.ok) {
       jobs = await response.json();
       renderJobs();
@@ -150,7 +148,7 @@ async function loadRecentJobs() {
 // Render jobs
 function renderJobs() {
   const listElement = document.getElementById('recentJobsList');
-  
+
   if (jobs.length === 0) {
     listElement.innerHTML = `
       <div class="empty-state">
@@ -159,7 +157,7 @@ function renderJobs() {
     `;
     return;
   }
-  
+
   listElement.innerHTML = jobs.map(job => `
     <div class="job-item">
       <div class="job-header">
@@ -178,19 +176,6 @@ function renderJobs() {
   `).join('');
 }
 
-// Clear download records (from local storage, not from NAS)
-async function clearRecords() {
-  if (confirm('Clear all download records from this extension?\n\n(This will not delete files from NAS)')) {
-    // Clear local storage
-    await chrome.storage.local.set({ jobs: [] });
-    
-    // Reload jobs (will show empty state)
-    jobs = [];
-    renderJobs();
-    
-    showToast('🗑️ Records cleared');
-  }
-}
 
 // Send to NAS
 async function sendToNAS(url, pageUrl) {
@@ -199,25 +184,25 @@ async function sendToNAS(url, pageUrl) {
     chrome.runtime.openOptionsPage();
     return;
   }
-  
+
   try {
     // Get current tab title
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const title = tab.title || 'Untitled Video';
-    
+
     chrome.runtime.sendMessage({
       action: 'sendToNAS',
       url: url,
       title: title,
       pageUrl: pageUrl || tab.url
     });
-    
+
     // Show feedback
     showToast('📤 Sending to NAS...');
-    
+
     // Refresh jobs after 2 seconds
     setTimeout(loadRecentJobs, 2000);
-    
+
   } catch (error) {
     console.error('Error:', error);
     showToast('❌ Failed to send');
@@ -249,7 +234,7 @@ function showToast(message) {
     z-index: 1000;
   `;
   document.body.appendChild(toast);
-  
+
   setTimeout(() => {
     toast.remove();
   }, 2000);

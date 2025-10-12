@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chrome2NAS M3U8 Downloader</title>
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div class="container">
+  <div class="sidepanel-wrapper">
+    <div class="container">
     <!-- Header -->
     <div class="header">
       <h1>🎬 M3U8 Downloader</h1>
@@ -26,7 +27,7 @@
         <h2>Detected M3U8 URLs</h2>
         <button id="refreshBtn" class="small-btn">🔄</button>
       </div>
-      
+
       <div id="detectedUrlsList" class="url-list">
         <div class="empty-state">
           <p>🔍 No M3U8 URLs detected yet</p>
@@ -38,24 +39,23 @@
     <!-- Recent Jobs Section -->
     <div class="section">
       <div class="section-header">
-        <h2>Recent Downloads</h2>
+        <h2>Recent Downloads on NAS</h2>
         <button id="refreshJobsBtn" class="small-btn">🔄</button>
       </div>
-      
+
       <div id="recentJobsList" class="job-list">
         <div class="empty-state">
-          <p>📥 No recent downloads</p>
+          <p>📥 No recent downloads on NAS</p>
         </div>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <button id="openOptionsBtn" class="secondary-btn">⚙️ Settings</button>
-      <button id="clearBtn" class="secondary-btn">🗑️ Clear</button>
     </div>
   </div>
+  </div>
 
-  <script src="popup.js"></script>
+  <script src="sidepanel.js"></script>
 </body>
 </html>

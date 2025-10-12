@@ -7,7 +7,8 @@
     "storage",
     "contextMenus",
     "notifications",
-    "webRequest"
+    "webRequest",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -16,12 +17,15 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup/popup.html",
+    "default_title": "Open M3U8 Downloader",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "options_page": "options/options.html",
   "icons": {

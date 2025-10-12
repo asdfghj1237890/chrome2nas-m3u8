@@ -4,6 +4,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](https://docs.docker.com/compose/)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-red.svg)](https://developer.chrome.com/docs/extensions/)
+[![Release](https://img.shields.io/github/v/release/asdfghj1237890/chrome2nas-m3u8)](https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest)
 
 > Seamlessly capture m3u8 video streams from Chrome and download them to your NAS
 
@@ -23,10 +24,15 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 
 ## Quick Links
 
+<img align="right" src="docs/extension-screenshot.png" alt="Chrome Extension Screenshot" width="300">
+<p align="right"><sub>Chrome Extension Interface (Click to view full size)</sub></p>
+
 - **[🚀 Installation Guide](INSTALL.md)** - Complete setup instructions
 - **[📋 Technical Documentation](docs/)** - Architecture & specifications
 - **[🔒 Security Policy](SECURITY.md)** - Security guidelines
 - **[🤝 Contributing](CONTRIBUTING.md)** - How to contribute
+
+
 
 ## Key Features
 
@@ -57,6 +63,8 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 - Redis
 - PostgreSQL
 - Docker & Docker Compose
+
+<br clear="both">
 
 ## Project Status
 
@@ -119,24 +127,28 @@ chrome2nas-m3u8/
 
 **Quick setup:**
 ```bash
-# 1. Clone repository
-git clone https://github.com/asdfghj1237890/chrome2nas-m3u8.git
-cd chrome2nas-m3u8/docker
+# 1. Download latest release assets
+curl -L -o chrome2nas-docker.zip https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
 
-# 2. Create .env file with your credentials
+# 2. Unzip Docker package
+unzip chrome2nas-docker.zip -d m3u8-downloader
+cd m3u8-downloader/docker
+
+# 3. Create .env file with your credentials
 cat > .env << EOF
-DB_PASSWORD=$(openssl rand -base64 24)
-API_KEY=$(openssl rand -base64 32)
+DB_PASSWORD=$(YOUR OWN PASSWORD)
+API_KEY=$(YOUR OWN API KEY)
 MAX_CONCURRENT_DOWNLOADS=3
 MAX_DOWNLOAD_WORKERS=10
 LOG_LEVEL=INFO
 ALLOWED_ORIGINS=chrome-extension://*
 EOF
 
-# 3. Deploy services
+# 4. Deploy services
 docker-compose up -d
 
-# 4. Install Chrome extension from chrome-extension/ folder
+# 5. Install Chrome extension: unzip chrome2nas-extension.zip and load the
+#    unzipped folder in Chrome (Developer mode → Load unpacked)
 ```
 
 For detailed instructions including Synology NAS setup, see **[INSTALL.md](INSTALL.md)**

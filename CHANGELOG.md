@@ -11,6 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 4: Integration testing & optimization
 - Phase 5: Production deployment guide & best practices
 
+## [1.1.0] - 2025-10-13
+
+### Added
+- **Expanded to 2 download workers** for parallel processing capability
+  - Total system capacity increased to 6 concurrent videos (3 per worker)
+  - Automatic load balancing via Redis queue
+  - Improved throughput and high availability
+- Comprehensive documentation of dual-worker architecture
+  - Multi-worker design explanation in ARCHITECTURE.md
+  - Worker scaling guidelines in INSTALL.md
+  - Performance tuning recommendations
+  - Load balancing via Redis queue documentation
+
+### Fixed
+- Download failure issues resolved with improved worker architecture
+- Enhanced error handling and retry mechanism stability
+- Better resource management under high load
+
+### Changed
+- Docker Compose now deploys 2 workers by default (previously 1)
+
 ## [1.0.0] - 2025-10-12
 
 ### Added - Phase 3 Complete: Chrome Extension

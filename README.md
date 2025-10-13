@@ -45,6 +45,7 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 
 ### NAS Docker Service
 - ✅ RESTful API for job management
+- ✅ **Dual-worker architecture** for parallel processing
 - ✅ Multi-threaded segment downloader
 - ✅ FFmpeg-based video merging
 - ✅ Job queue with Redis
@@ -80,6 +81,7 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
   - FastAPI basic endpoints
   - Download worker skeleton
 - [x] Phase 2: Download worker (M3U8 parser, FFmpeg integration) ✅
+  - Dual-worker architecture (2 workers by default)
   - M3U8 playlist parser
   - Multi-threaded segment downloader
   - FFmpeg video merger
@@ -181,9 +183,16 @@ API_KEY=your-secure-api-key
 NAS_STORAGE_PATH=/volume1/downloads/m3u8
 DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
 REDIS_URL=redis://redis:6379
-MAX_CONCURRENT_DOWNLOADS=3
+MAX_CONCURRENT_DOWNLOADS=3  # Per worker (2 workers = 6 total)
+MAX_DOWNLOAD_WORKERS=10      # Threads per video
 FFMPEG_THREADS=4
 ```
+
+### Worker Scaling
+The system runs **2 workers** by default for parallel processing:
+- **Total capacity**: Up to 6 videos simultaneously (3 per worker)
+- **Scale up**: Add more workers in `docker-compose.yml` for higher throughput
+- **Scale down**: Remove `worker2` service for lower-spec NAS devices
 
 ### Extension Settings
 - **NAS Endpoint**: `https://192.168.1.100:52052`
@@ -253,7 +262,7 @@ MIT License - See LICENSE file for details
 ---
 
 **Status**: Core Features Complete | Production Ready  
-**Version**: 1.0.5
+**Version**: 1.1.0
 **Last Updated**: 2025-10-12  
 **Port**: 52052 (unified)
 

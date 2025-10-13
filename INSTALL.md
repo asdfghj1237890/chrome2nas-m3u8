@@ -328,10 +328,13 @@ curl http://YOUR_NAS_IP:52052/api/jobs \
   -H "Authorization: Bearer $API_KEY"
 ```
 
-### Test 4: Monitor Worker
+### Test 4: Monitor Workers
 ```bash
-# View real-time logs
-docker logs -f m3u8_worker
+# View real-time logs from both workers
+docker logs -f m3u8_worker_1
+
+# Check worker2
+docker logs -f m3u8_worker_2
 
 # Check for completed downloads
 ls -lh /volume1/xxxxx/downloads/completed/
@@ -403,8 +406,8 @@ ls -ld /volume1/xxxxx/downloads/
 
 **Check System Resources**
 ```bash
-# CPU and memory usage
-docker stats
+# CPU and memory usage for all workers
+docker stats m3u8_worker_1 m3u8_worker_2
 
 # Adjust settings in .env
 MAX_CONCURRENT_DOWNLOADS=2  # Reduce if overloaded
@@ -412,9 +415,19 @@ MAX_DOWNLOAD_WORKERS=5      # Reduce per-video threads
 FFMPEG_THREADS=2            # Reduce FFmpeg threads
 ```
 
+**Consider Reducing Workers**
+If your NAS is struggling with 2 workers:
+```bash
+# Stop worker2
+docker stop m3u8_worker_2
+
+# Or remove it from docker-compose.yml and restart
+docker-compose up -d
+```
+
 **Restart Services**
 ```bash
-docker-compose restart worker
+docker-compose restart worker worker2
 ```
 
 ### Issue: Video Won't Play
@@ -433,25 +446,95 @@ docker logs m3u8_worker | grep -i ffmpeg
 
 ## Performance Tuning
 
-### High-End System (8GB+ RAM, 4+ cores)
+### Understanding Worker Architecture
+
+The system uses **2 download workers** by default, both pulling from a shared Redis queue:
+- **Benefit**: Process up to 6 videos simultaneously (3 per worker)
+- **Requirement**: Each worker uses ~1GB RAM under load
+- **Scaling**: Add/remove workers based on your NAS capacity
+
+### Worker Scaling Recommendations
+
+#### High-End System (8GB+ RAM, 4+ cores)
+**Keep 2 workers** or add a 3rd worker:
 ```env
 MAX_CONCURRENT_DOWNLOADS=5
 MAX_DOWNLOAD_WORKERS=15
 FFMPEG_THREADS=6
 ```
 
-### Mid-Range System (4GB RAM, 2-4 cores)
+To add worker3, edit `docker-compose.yml`:
+```yaml
+worker3:
+  build:
+    context: ./worker
+    dockerfile: Dockerfile
+  container_name: m3u8_worker_3
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/m3u8_db
+    - REDIS_URL=redis://redis:6379/0
+    - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+    - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
+    - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+    - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
+  volumes:
+    - ../downloads:/downloads
+    - ../logs:/logs
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - m3u8_network
+```
+
+Then restart:
+```bash
+docker-compose up -d
+```
+
+#### Mid-Range System (4GB RAM, 2-4 cores) - **DEFAULT**
+**Keep 2 workers** (default configuration):
 ```env
 MAX_CONCURRENT_DOWNLOADS=3
 MAX_DOWNLOAD_WORKERS=10
 FFMPEG_THREADS=4
 ```
 
-### Entry-Level System (2GB RAM)
+#### Entry-Level System (2GB RAM, 1-2 cores)
+**Reduce to 1 worker** - Remove `worker2` from docker-compose.yml:
+```bash
+# Comment out or remove the worker2 section in docker-compose.yml
+# OR stop worker2:
+docker stop m3u8_worker_2
+docker rm m3u8_worker_2
+```
+
+Then adjust settings:
 ```env
 MAX_CONCURRENT_DOWNLOADS=2
 MAX_DOWNLOAD_WORKERS=5
 FFMPEG_THREADS=2
+```
+
+### Monitoring Worker Performance
+
+Check worker logs:
+```bash
+# View all workers
+docker-compose logs -f worker worker2
+
+# View specific worker
+docker logs -f m3u8_worker_1
+docker logs -f m3u8_worker_2
+
+# Check resource usage
+docker stats m3u8_worker_1 m3u8_worker_2
 ```
 
 ---

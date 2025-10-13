@@ -169,11 +169,28 @@ services:
       - db
       - redis
 
+  # Worker 1
   worker:
     build: ./worker
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
+      - MAX_CONCURRENT_DOWNLOADS=3
+      - MAX_DOWNLOAD_WORKERS=10
+    volumes:
+      - /nas/downloads:/downloads
+    depends_on:
+      - redis
+      - db
+
+  # Worker 2 (scales processing capacity)
+  worker2:
+    build: ./worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
+      - MAX_CONCURRENT_DOWNLOADS=3
+      - MAX_DOWNLOAD_WORKERS=10
     volumes:
       - /nas/downloads:/downloads
     depends_on:
@@ -208,9 +225,16 @@ volumes:
 
 #### 3.2.3 Download Worker Logic
 
-**Flow**:
+**Multi-Worker Design**:
+The system deploys **2 independent workers** by default, both pulling from the same Redis queue:
+- **Worker 1** and **Worker 2** operate independently
+- Automatic load balancing via Redis BLPOP (first available worker gets next job)
+- Total capacity: Up to 6 videos processing simultaneously (3 per worker)
+- Scalable: Add more workers for higher throughput
+
+**Flow (per worker)**:
 ```
-1. Receive job from Redis queue
+1. Receive job from Redis queue (BLPOP - blocking)
 2. Parse m3u8 manifest
    ├─ Extract all segment URLs
    └─ Detect resolution variants
@@ -285,11 +309,12 @@ volumes:
 - **API Gateway**: 
   - Option A: FastAPI (Python) - Recommended
   - Option B: Express.js (Node.js)
-- **Worker**: Python 3.11+
+- **Workers**: Python 3.11+ (2 workers by default, scalable)
   - Libraries: requests, m3u8, asyncio
+  - Multi-worker architecture for parallel processing
 - **FFmpeg**: Latest stable version
 - **Database**: PostgreSQL 15 or SQLite 3
-- **Queue**: Redis 7+
+- **Queue**: Redis 7+ (for worker coordination)
 
 ### 4.3 Infrastructure
 - Docker & Docker Compose

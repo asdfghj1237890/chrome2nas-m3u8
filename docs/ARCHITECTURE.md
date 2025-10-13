@@ -518,19 +518,103 @@ All Errors
 
 ---
 
-## 8. Performance Optimization
+## 8. Multi-Worker Architecture
+
+### 8.1 Worker Pool Design
+
+The system deploys **2 independent download workers** by default to maximize throughput and reliability.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Multi-Worker Architecture                       │
+└─────────────────────────────────────────────────────────────┘
+
+                    ┌──────────────┐
+                    │   Redis      │
+                    │   Queue      │
+                    │  (FIFO)      │
+                    └──────┬───────┘
+                           │
+            ┌──────────────┼──────────────┐
+            │              │              │
+            ↓              ↓              ↓
+    ┌──────────────┐ ┌──────────────┐  (Scalable)
+    │   Worker 1   │ │   Worker 2   │
+    │              │ │              │
+    │ • BLPOP      │ │ • BLPOP      │
+    │ • Download   │ │ • Download   │
+    │ • Merge      │ │ • Merge      │
+    │ • Update DB  │ │ • Update DB  │
+    └──────────────┘ └──────────────┘
+```
+
+### 8.2 How It Works
+
+**Load Balancing via Redis Queue:**
+- Both workers pull jobs from the **same Redis queue** using blocking pop (BLPOP)
+- First available worker gets the next job (automatic load distribution)
+- No job duplication - each job is processed by exactly one worker
+- Workers operate independently with no coordination needed
+
+**Benefits:**
+1. **Parallel Processing**: Process 2 videos simultaneously (or more with scaling)
+2. **High Availability**: If one worker crashes, the other continues working
+3. **Better Resource Utilization**: Maximize CPU/network usage on capable NAS devices
+4. **Queue Resilience**: Jobs remain in queue until successfully processed
+
+### 8.3 Worker Capacity
+
+**Per-Worker Configuration:**
+```
+MAX_CONCURRENT_DOWNLOADS=3   # Jobs processed simultaneously per worker
+MAX_DOWNLOAD_WORKERS=10      # Threads per video for segment downloading
+```
+
+**Total System Capacity (2 Workers):**
+- Maximum parallel videos: 2 × 3 = **6 videos**
+- Maximum download threads: 6 × 10 = **60 threads**
+- Recommended for NAS with 4+ CPU cores and 4GB+ RAM
+
+### 8.4 Scaling Workers
+
+**Add More Workers (docker-compose.yml):**
+```yaml
+worker3:
+  build:
+    context: ./worker
+    dockerfile: Dockerfile
+  container_name: m3u8_worker_3
+  # ... same config as worker1/worker2 ...
+```
+
+**Or Scale Existing Service:**
+```bash
+docker-compose up -d --scale worker=5
+```
+
+**Scaling Guidelines:**
+| NAS Specs | Recommended Workers | Total Capacity |
+|-----------|-------------------|----------------|
+| 2 cores, 2GB RAM | 1 worker | 3 videos |
+| 4 cores, 4GB RAM | 2 workers (default) | 6 videos |
+| 8+ cores, 8GB+ RAM | 3-4 workers | 9-12 videos |
+
+---
+
+## 9. Performance Optimization
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                  Performance Strategies                      │
 └─────────────────────────────────────────────────────────────┘
 
-1. Concurrent Processing
+1. Concurrent Processing (Multi-Worker)
    ┌──────────────────────────────┐
-   │ Worker Pool                  │
+   │ Worker Pool (2 Workers)      │
    │ ├─→ 10 threads per video     │
-   │ ├─→ 3 videos concurrently    │
-   │ └─→ Total: 30 active threads │
+   │ ├─→ 3 videos per worker      │
+   │ ├─→ 6 videos total capacity  │
+   │ └─→ 60 active threads max    │
    └──────────────────────────────┘
 
 2. Caching
@@ -567,15 +651,15 @@ All Errors
 
 Expected Performance:
   - 1080p video (1GB): ~10-15 minutes
-  - Throughput: 4-8 MB/s
-  - Concurrent downloads: 3-5 (depending on NAS)
+  - Throughput: 4-8 MB/s per worker
+  - Concurrent downloads: 6 (with 2 workers)
   - CPU usage: 50-70% during merge
-  - RAM usage: ~500MB per video
+  - RAM usage: ~500MB per video, ~1GB per worker
 ```
 
 ---
 
-## 9. Monitoring & Observability
+## 10. Monitoring & Observability
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -623,7 +707,7 @@ Alerting Rules
 
 ---
 
-## 10. Deployment Architecture
+## 11. Deployment Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -649,7 +733,8 @@ Internet
 │ │ ├─→ nginx (reverse proxy)      │ │
 │ │ │   └─→ SSL cert (Let's Encrypt)│ │
 │ │ ├─→ api (FastAPI)               │ │
-│ │ ├─→ worker (Python)             │ │
+│ │ ├─→ worker1 (Python)            │ │
+│ │ ├─→ worker2 (Python)            │ │
 │ │ ├─→ db (PostgreSQL)             │ │
 │ │ └─→ redis                       │ │
 │ │                                 │ │

@@ -8,6 +8,9 @@ import requests
 from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Optional
 import m3u8
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,8 @@ class M3U8Parser:
                 self.url, 
                 headers=self.headers,
                 timeout=30,
-                allow_redirects=True
+                allow_redirects=True,
+                verify=False
             )
             response.raise_for_status()
             return response.text
@@ -150,7 +154,7 @@ class M3U8Parser:
             if segment.key and segment.key.method == 'AES-128':
                 key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
                 logger.info(f"Fetching encryption key: {key_url}")
-                response = requests.get(key_url, headers=self.headers)
+                response = requests.get(key_url, headers=self.headers, verify=False)
                 response.raise_for_status()
                 return response.content
         return None

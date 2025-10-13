@@ -10,6 +10,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Callable
 import time
 from pathlib import Path
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,8 @@ class SegmentDownloader:
                 url,
                 headers=self.headers,
                 timeout=self.timeout,
-                stream=True
+                stream=True,
+                verify=False
             )
             response.raise_for_status()
             

@@ -20,11 +20,13 @@ class FFmpegMerger:
         self,
         segment_files: List[str],
         output_file: str,
-        threads: int = 4
+        threads: int = 4,
+        concat_dir: Optional[str] = None
     ):
         self.segment_files = segment_files
         self.output_file = output_file
         self.threads = threads
+        self.concat_dir = concat_dir or str(Path(output_file).parent)
         
         # Verify FFmpeg is available
         if not self._check_ffmpeg():
@@ -57,8 +59,8 @@ class FFmpegMerger:
         
         logger.info(f"Merging {len(self.segment_files)} segments into {self.output_file}")
         
-        # Create temporary concat file
-        concat_file = Path(self.output_file).parent / "concat_list.txt"
+        # Create temporary concat file in designated directory
+        concat_file = Path(self.concat_dir) / "concat_list.txt"
         
         try:
             # Create concat file
@@ -112,11 +114,6 @@ class FFmpegMerger:
         except Exception as e:
             logger.error(f"Merge failed: {e}")
             return False
-        
-        finally:
-            # Clean up concat file
-            if concat_file.exists():
-                concat_file.unlink()
     
     def merge_with_re_encode(self) -> bool:
         """
@@ -128,7 +125,8 @@ class FFmpegMerger:
         
         logger.info("Attempting merge with re-encoding (slower)")
         
-        concat_file = Path(self.output_file).parent / "concat_list.txt"
+        # Use same concat file location as merge()
+        concat_file = Path(self.concat_dir) / "concat_list.txt"
         
         try:
             self._create_concat_file(str(concat_file))
@@ -169,17 +167,14 @@ class FFmpegMerger:
         except Exception as e:
             logger.error(f"Re-encode failed: {e}")
             return False
-        
-        finally:
-            if concat_file.exists():
-                concat_file.unlink()
 
 
 def merge_segments(
     segment_files: List[str],
     output_file: str,
     threads: int = 4,
-    try_re_encode: bool = True
+    try_re_encode: bool = True,
+    concat_dir: Optional[str] = None
 ) -> bool:
     """
     Convenience function to merge segments
@@ -189,19 +184,31 @@ def merge_segments(
         output_file: Output video file path
         threads: Number of FFmpeg threads
         try_re_encode: Try re-encoding if copy mode fails
+        concat_dir: Directory to store temporary concat file (defaults to output_file parent)
     
     Returns:
         True if successful
     """
-    merger = FFmpegMerger(segment_files, output_file, threads)
+    merger = FFmpegMerger(segment_files, output_file, threads, concat_dir)
+    concat_file = Path(concat_dir or Path(output_file).parent) / "concat_list.txt"
     
-    # Try copy mode first (fast)
-    success = merger.merge()
+    try:
+        # Try copy mode first (fast)
+        success = merger.merge()
+        
+        # If failed and re-encode is enabled, try re-encoding
+        if not success and try_re_encode:
+            logger.info("Copy mode failed, attempting re-encode")
+            success = merger.merge_with_re_encode()
+        
+        return success
     
-    # If failed and re-encode is enabled, try re-encoding
-    if not success and try_re_encode:
-        logger.info("Copy mode failed, attempting re-encode")
-        success = merger.merge_with_re_encode()
-    
-    return success
+    finally:
+        # Clean up concat file
+        if concat_file.exists():
+            try:
+                concat_file.unlink()
+                logger.debug(f"Cleaned up concat file: {concat_file}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup concat file: {e}")
 

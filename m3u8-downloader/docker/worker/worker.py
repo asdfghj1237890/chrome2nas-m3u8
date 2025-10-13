@@ -209,7 +209,8 @@ class DownloadWorker:
             success = merge_segments(
                 segment_files=segment_files,
                 output_file=output_file,
-                threads=int(os.getenv('FFMPEG_THREADS', 4))
+                threads=int(os.getenv('FFMPEG_THREADS', 4)),
+                concat_dir=temp_dir
             )
             
             if not success:

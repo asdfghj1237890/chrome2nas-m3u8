@@ -52,7 +52,7 @@ cd m3u8-downloader/docker
 API_KEY=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 24)
 
-# Create .env file
+# Create .env file and modify the value as you want
 cat > .env << EOF
 DB_PASSWORD=${DB_PASSWORD}
 API_KEY=${API_KEY}
@@ -87,7 +87,7 @@ curl http://localhost:52052/api/health
 
 # View logs
 docker logs m3u8_api
-docker logs m3u8_worker
+docker logs m3u8_worker_1
 ```
 
 ### 6. Install Chrome Extension
@@ -167,7 +167,7 @@ sudo chown -R 1026:100 /volume1/docker/m3u8-downloader
 ```bash
 cd /volume1/docker/m3u8-downloader/docker
 
-# Create .env file
+# Create .env file and setup the value as you want
 cat > .env << 'EOF'
 DB_PASSWORD=your_secure_password_here
 API_KEY=your_api_key_minimum_32_chars
@@ -194,6 +194,13 @@ cd /volume1/docker/m3u8-downloader/docker
 
 # Start services
 sudo docker-compose -f docker-compose.synology.yml up -d
+
+OR
+#  remove the docker-compose.yml and rename the docker-compose.synology.yml to docker-compose.yml
+#  go to projects in the container manager, create one and select the path "m3u8-downloader/docker"
+#  the system can find the docker-compose.yml to install the whole project
+
+# After the installation:
 
 # Check status
 sudo docker ps

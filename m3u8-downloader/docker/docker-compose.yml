@@ -6,6 +6,8 @@ services:
     image: postgres:15-alpine
     container_name: m3u8_db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
@@ -48,6 +50,8 @@ services:
       dockerfile: Dockerfile
     container_name: m3u8_api
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - API_KEY=${API_KEY:-change-this-key}
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
@@ -73,13 +77,43 @@ services:
     networks:
       - m3u8_network
 
-  # Download Worker
+  # Download Worker 1
   worker:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    container_name: m3u8_worker
+    container_name: m3u8_worker_1
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
+      - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+      - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
+    volumes:
+      - ../downloads:/downloads
+      - ../logs:/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - m3u8_network
+
+  # Download Worker 2
+  worker2:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: m3u8_worker_2
+    restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
       - REDIS_URL=redis://redis:6379/0

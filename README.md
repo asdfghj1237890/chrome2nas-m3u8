@@ -125,7 +125,7 @@ chrome2nas-m3u8/
 
 **[→ Complete Installation Guide](INSTALL.md)** - Step-by-step setup for all platforms
 
-**Quick setup:**
+**Quick setup for Synology NAS:**
 ```bash
 # 1. Download latest release assets
 curl -L -o chrome2nas-docker.zip https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
@@ -133,8 +133,9 @@ curl -L -o chrome2nas-docker.zip https://github.com/asdfghj1237890/chrome2nas-m3
 # 2. Unzip Docker package
 unzip chrome2nas-docker.zip -d m3u8-downloader
 cd m3u8-downloader/docker
+#    remove the docker-compose.yml and rename the docker-compose.synology.yml to docker-compose.yml
 
-# 3. Create .env file with your credentials
+# 3. Create .env file with your OWN credentials
 cat > .env << EOF
 DB_PASSWORD=$(YOUR OWN PASSWORD)
 API_KEY=$(YOUR OWN API KEY)
@@ -145,7 +146,8 @@ ALLOWED_ORIGINS=chrome-extension://*
 EOF
 
 # 4. Deploy services
-docker-compose up -d
+#    go to projects in the container manager, create one and select the path "m3u8-downloader/docker"
+#    the system can find the docker-compose.yml to install the whole project
 
 # 5. Install Chrome extension: unzip chrome2nas-extension.zip and load the
 #    unzipped folder in Chrome (Developer mode → Load unpacked)

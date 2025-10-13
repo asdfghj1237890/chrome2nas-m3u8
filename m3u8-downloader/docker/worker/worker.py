@@ -202,8 +202,19 @@ class DownloadWorker:
             if not safe_title:
                 safe_title = f"video_{job_id[:8]}"
             
-            output_file = f"/downloads/completed/{safe_title}.mp4"
-            Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+            # Handle file name collisions
+            output_dir = Path("/downloads/completed")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            base_name = safe_title
+            output_file = output_dir / f"{base_name}.mp4"
+            counter = 1
+            
+            while output_file.exists():
+                output_file = output_dir / f"{base_name} ({counter}).mp4"
+                counter += 1
+            
+            output_file = str(output_file)
             
             # Merge segments
             success = merge_segments(

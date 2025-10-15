@@ -157,6 +157,21 @@ html, body {
   white-space: nowrap;
 }
 
+.ip-warning {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fff3cd;
+  border-left: 3px solid #ff9800;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #856404;
+}
+
+.ip-warning strong {
+  color: #664d03;
+}
+
 .url-actions {
   display: flex;
   gap: 8px;

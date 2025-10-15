@@ -110,10 +110,20 @@ function renderDetectedUrls() {
     return;
   }
 
-  listElement.innerHTML = detectedUrls.map((urlInfo, index) => `
+  listElement.innerHTML = detectedUrls.map((urlInfo, index) => {
+    const hasIp = containsIpAddress(urlInfo.url);
+    return `
     <div class="url-item">
       <div class="url-title">M3U8 URL ${index + 1}</div>
       <div class="url-link" title="${urlInfo.url}">${truncateUrl(urlInfo.url)}</div>
+      ${hasIp ? `
+        <div class="ip-warning">
+          ⚠️ <strong>IP-Restricted URL Detected</strong><br>
+          This URL contains an IP address, meaning the website restricts downloads to that specific IP. 
+          To download successfully, your NAS and PC must use the same IP address. 
+          Use Tailscale exit node or similar VPN solution to route the traffic through a same IP address.
+        </div>
+      ` : ''}
       <div class="url-actions">
         <button class="btn-send" data-url="${escapeHtml(urlInfo.url)}" data-page="${escapeHtml(urlInfo.pageUrl || '')}">
           📤 Send to NAS
@@ -123,7 +133,8 @@ function renderDetectedUrls() {
         </button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   // Add event listeners to buttons
   listElement.querySelectorAll('.btn-send').forEach(btn => {
@@ -269,6 +280,14 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Check if URL contains an IP address
+function containsIpAddress(url) {
+  // IPv4 pattern in query parameters: matches ?ip=114.24.18.78 or &ip=114.24.18.78
+  const ipv4QueryPattern = /[?&]ip=(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
+  
+  return ipv4QueryPattern.test(url);
 }
 
 // Auto-refresh jobs every 5 seconds

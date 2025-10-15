@@ -12,6 +12,7 @@ import json
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from urllib.parse import urlparse
 import signal
 
 # Configuration
@@ -106,13 +107,21 @@ class DownloadWorker:
             if not row:
                 return None
             
+            # Handle headers - can be dict (JSONB) or string (JSON)
+            headers = {}
+            if row.headers:
+                if isinstance(row.headers, dict):
+                    headers = row.headers
+                elif isinstance(row.headers, str):
+                    headers = json.loads(row.headers)
+            
             return {
                 "id": str(row.id),
                 "url": row.url,
                 "title": row.title,
                 "retry_count": row.retry_count,
                 "referer": row.referer,
-                "headers": json.loads(row.headers) if row.headers else {},
+                "headers": headers,
                 "source_page": row.source_page
             }
         
@@ -148,8 +157,28 @@ class DownloadWorker:
             # Step 1: Parse m3u8 playlist (5%)
             logger.info("Step 1: Parsing m3u8 playlist")
             headers = job.get('headers', {})
+            
+            # Add critical headers for CORS and authentication
             if job.get('referer'):
                 headers['Referer'] = job['referer']
+            
+            # Add Origin header from source_page for CORS
+            if job.get('source_page'):
+                parsed = urlparse(job['source_page'])
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+                headers['Origin'] = origin
+                logger.info(f"Added Origin header: {origin}")
+            
+            # Add User-Agent to mimic browser
+            if 'User-Agent' not in headers:
+                headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+            
+            # Debug: Log headers to verify
+            logger.info(f"Request headers: {headers}")
+            if 'Cookie' in headers:
+                logger.info(f"Cookie present: {headers['Cookie'][:100]}...")
+            else:
+                logger.warning("No Cookie in headers!")
             
             playlist_info = parse_m3u8(job['url'], headers)
             self.update_job_status(job_id, "downloading", progress=5)

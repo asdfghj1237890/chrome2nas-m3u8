@@ -110,15 +110,41 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     // Clean up title
     title = title.replace(/[<>:"/\\|?*]/g, '').substring(0, 100);
     
+    // Get cookies for the source page domain
+    let cookieHeader = '';
+    try {
+      const pageUrlObj = new URL(pageUrl);
+      const cookies = await chrome.cookies.getAll({ url: pageUrl });
+      
+      console.log(`Getting cookies for URL: ${pageUrl}`);
+      console.log(`Found ${cookies.length} cookies`);
+      
+      if (cookies.length > 0) {
+        // Convert cookies to Cookie header format
+        cookieHeader = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+        console.log(`Cookie header created (${cookieHeader.length} chars):`, cookieHeader.substring(0, 200));
+      } else {
+        console.warn(`No cookies found for ${pageUrlObj.hostname}`);
+      }
+    } catch (error) {
+      console.error('Failed to get cookies:', error);
+    }
+    
     // Prepare request
     const requestBody = {
       url: url,
       title: title,
       source_page: pageUrl,
-      referer: pageUrl
+      referer: pageUrl,
+      headers: cookieHeader ? { 'Cookie': cookieHeader } : {}
     };
     
-    console.log('Sending to NAS:', requestBody);
+    console.log('Sending to NAS:');
+    console.log('  URL:', requestBody.url);
+    console.log('  Title:', requestBody.title);
+    console.log('  Referer:', requestBody.referer);
+    console.log('  Headers:', requestBody.headers);
+    console.log('  Has Cookie:', !!requestBody.headers.Cookie);
     
     // Send to NAS API
     const response = await fetch(`${settings.nasEndpoint}/api/download`, {

@@ -9,7 +9,8 @@
     "notifications",
     "webRequest",
     "webNavigation",
-    "sidePanel"
+    "sidePanel",
+    "cookies"
   ],
   "host_permissions": [
     "<all_urls>"

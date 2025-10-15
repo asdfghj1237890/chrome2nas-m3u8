@@ -72,6 +72,15 @@ class SegmentDownloader:
                 stream=True,
                 verify=False
             )
+            
+            # Debug: Log response details on error
+            if response.status_code == 474:
+                logger.error(f"Segment {index} got 474 error")
+                logger.error(f"Response headers: {dict(response.headers)}")
+                # Get error page content (first 500 chars)
+                error_content = response.text[:500] if hasattr(response, 'text') else "No content"
+                logger.error(f"Error content: {error_content}")
+            
             response.raise_for_status()
             
             # Write to file

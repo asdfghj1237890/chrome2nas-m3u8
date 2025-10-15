@@ -92,7 +92,7 @@ class SegmentDownloader:
                 return self.download_segment(segment, retry_count + 1)
             else:
                 logger.error(f"Segment {index} failed after {self.max_retries} attempts")
-                self.failed_segments.append(segment)
+                self.failed_segments.append({'segment': segment, 'error': str(e)})
                 return None
     
     def download_all(
@@ -120,23 +120,33 @@ class SegmentDownloader:
             }
             
             # Process completed downloads
-            for future in as_completed(future_to_segment):
-                segment = future_to_segment[future]
-                index = segment['index']
-                
-                try:
-                    file_path = future.result()
-                    if file_path:
-                        downloaded_files[index] = file_path
-                        self.downloaded_count += 1
+            try:
+                for future in as_completed(future_to_segment):
+                    segment = future_to_segment[future]
+                    index = segment['index']
                     
-                    # Call progress callback
+                    try:
+                        file_path = future.result()
+                        if file_path:
+                            downloaded_files[index] = file_path
+                            self.downloaded_count += 1
+                    
+                    except Exception as e:
+                        logger.error(f"Unexpected error downloading segment {index}: {e}")
+                        self.failed_segments.append({'segment': segment, 'error': str(e)})
+                    
+                    # Call progress callback (outside try-except so callback exceptions propagate)
                     if progress_callback:
                         progress_callback(self.downloaded_count, self.total_segments)
-                
-                except Exception as e:
-                    logger.error(f"Unexpected error downloading segment {index}: {e}")
-                    self.failed_segments.append(segment)
+            
+            except Exception as e:
+                # Callback raised an exception (e.g., too many errors detected)
+                # Cancel all pending futures
+                logger.warning("Download aborted, cancelling remaining tasks...")
+                for future in future_to_segment:
+                    future.cancel()
+                # Re-raise the exception
+                raise
         
         # Filter out None values (failed downloads)
         successful_files = [f for f in downloaded_files if f is not None]

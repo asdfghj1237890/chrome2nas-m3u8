@@ -173,17 +173,30 @@ class DownloadWorker:
             logger.info("Step 2: Downloading segments")
             temp_dir = tempfile.mkdtemp(prefix=f"m3u8_{job_id}_")
             
-            def progress_callback(completed, total):
-                # Map download progress to 5-85%
-                download_progress = int(5 + (completed / total) * 80)
-                self.update_job_status(job_id, "downloading", progress=download_progress)
-            
             downloader = SegmentDownloader(
                 segments=playlist_info['segments'],
                 output_dir=temp_dir,
                 headers=headers,
-                max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 10))
+                max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2))
             )
+            
+            def progress_callback(completed, total):
+                # Map download progress to 5-85%
+                download_progress = int(5 + (completed / total) * 80)
+                self.update_job_status(job_id, "downloading", progress=download_progress)
+                
+                # Check if too many segments failed with 403/474 errors during download
+                failed_count = len(downloader.failed_segments)
+                if failed_count > 20:
+                    # Count HTTP 403/474 errors
+                    http_error_count = sum(
+                        1 for item in downloader.failed_segments 
+                        if '403' in item['error'] or '474' in item['error']
+                    )
+                    
+                    if http_error_count > 20:
+                        logger.error(f"Too many HTTP 403/474 errors detected: {http_error_count} segments failed")
+                        raise Exception(f"Download aborted: {http_error_count} segments failed with HTTP 403/474 errors (URL expired or blocked)")
             
             segment_files = downloader.download_all(progress_callback)
             
@@ -251,25 +264,36 @@ class DownloadWorker:
         except Exception as e:
             logger.error(f"Job {job_id} failed: {e}", exc_info=True)
             
-            # Update retry count
-            retry_count = job.get("retry_count", 0) + 1
+            error_str = str(e)
             
-            if retry_count < MAX_RETRY_ATTEMPTS:
-                # Retry: put back in queue
-                logger.info(f"Retrying job {job_id} (attempt {retry_count})")
-                self.db.execute(text("""
-                    UPDATE jobs SET retry_count = :retry_count, status = 'pending'
-                    WHERE id = :job_id
-                """), {"retry_count": retry_count, "job_id": job_id})
-                self.db.commit()
-                redis_client.rpush("download_queue", job_id)
-            else:
-                # Max retries reached: mark as failed
+            # Check if error is due to 403/474 (URL expired/blocked) - do not retry
+            if "403/474 errors" in error_str or "URL expired or blocked" in error_str:
+                logger.warning(f"Job {job_id} failed with URL expiration/blocking error - not retrying")
                 self.update_job_status(
-                    job_id, 
+                    job_id,
                     "failed",
-                    error_message=str(e)
+                    error_message=error_str
                 )
+            else:
+                # Update retry count for other errors
+                retry_count = job.get("retry_count", 0) + 1
+                
+                if retry_count < MAX_RETRY_ATTEMPTS:
+                    # Retry: put back in queue
+                    logger.info(f"Retrying job {job_id} (attempt {retry_count})")
+                    self.db.execute(text("""
+                        UPDATE jobs SET retry_count = :retry_count, status = 'pending'
+                        WHERE id = :job_id
+                    """), {"retry_count": retry_count, "job_id": job_id})
+                    self.db.commit()
+                    redis_client.rpush("download_queue", job_id)
+                else:
+                    # Max retries reached: mark as failed
+                    self.update_job_status(
+                        job_id, 
+                        "failed",
+                        error_message=error_str
+                    )
         
         finally:
             # Cleanup temp directory

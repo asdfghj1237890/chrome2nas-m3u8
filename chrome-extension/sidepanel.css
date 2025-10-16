@@ -45,15 +45,32 @@ html, body {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  font-size: 16px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
 }
 
 .icon-btn:hover {
   background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+.icon-btn svg {
+  transition: transform 0.6s ease;
+}
+
+.icon-btn:active svg {
+  transform: rotate(180deg);
 }
 
 /* Status Bar */
@@ -103,18 +120,36 @@ html, body {
 }
 
 .small-btn {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
+  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 6px rgba(74, 144, 226, 0.3);
 }
 
 .small-btn:hover {
-  background: #f5f5f5;
-  border-color: #999;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(80, 201, 195, 0.5);
+  background: linear-gradient(135deg, #5FA3F5 0%, #6DD5D0 100%);
+}
+
+.small-btn:active {
+  transform: scale(0.95);
+}
+
+.small-btn svg {
+  transition: transform 0.6s ease;
+}
+
+.small-btn:active svg {
+  transform: rotate(360deg);
 }
 
 /* URL List */

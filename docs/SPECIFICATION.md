@@ -86,11 +86,8 @@ This document specifies a complete system for capturing m3u8 video stream URLs f
 - **Structure**:
   ```
   /downloads/
-    ├── completed/
-    │   ├── YYYY-MM-DD/
-    │   │   └── video_title.mp4
-    ├── processing/
-    └── failed/
+    └── completed/
+        └── video_title.mp4
   ```
 
 ---
@@ -287,7 +284,7 @@ The system deploys **2 independent workers** by default, both pulling from the s
    - HTTPS-only communication
 
 2. **Network**
-   - Expose NAS service via reverse proxy (nginx)
+   - Optional: Use reverse proxy (Caddy, Traefik) for HTTPS
    - Optional: Tailscale/Zerotier for secure tunneling
    - Rate limiting: 10 requests/minute per IP
 
@@ -318,7 +315,7 @@ The system deploys **2 independent workers** by default, both pulling from the s
 
 ### 4.3 Infrastructure
 - Docker & Docker Compose
-- Reverse Proxy: nginx or Traefik
+- Optional: Reverse Proxy (Caddy, Traefik) for HTTPS
 - Optional: Portainer for container management
 
 ---

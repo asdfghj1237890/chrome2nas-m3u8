@@ -6,7 +6,7 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
   color: #333;
   min-height: 100vh;
   padding: 40px 20px;
@@ -85,8 +85,8 @@ input[type="password"] {
 input[type="text"]:focus,
 input[type="password"]:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #4A90E2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 input[type="checkbox"] {
@@ -132,23 +132,23 @@ code {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
   color: white;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
 }
 
 .btn-secondary {
   background: white;
-  color: #667eea;
-  border: 2px solid #667eea;
+  color: #4A90E2;
+  border: 2px solid #4A90E2;
 }
 
 .btn-secondary:hover {
-  background: #f5f7ff;
+  background: #f0f7ff;
 }
 
 /* Status Message */
@@ -181,7 +181,7 @@ code {
 /* Info Box */
 .info-box {
   background: #f9f9f9;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid #4A90E2;
   padding: 16px;
   margin-top: 16px;
   border-radius: 4px;
@@ -190,7 +190,7 @@ code {
 .info-box h3 {
   font-size: 14px;
   margin-bottom: 12px;
-  color: #667eea;
+  color: #4A90E2;
 }
 
 .info-box ol {

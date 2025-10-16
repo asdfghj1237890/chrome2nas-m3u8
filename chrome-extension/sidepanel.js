@@ -60,7 +60,7 @@ async function checkConnection() {
   const statusIcon = document.getElementById('statusIcon');
 
   if (!settings.nasEndpoint || !settings.apiKey) {
-    statusElement.className = 'status-bar disconnected';
+    statusElement.className = 'connection-status disconnected';
     statusText.textContent = 'Not configured';
     statusIcon.textContent = '⚠️';
     return;
@@ -75,15 +75,15 @@ async function checkConnection() {
     });
 
     if (response.ok) {
-      statusElement.className = 'status-bar connected';
-      statusText.textContent = 'Connected to NAS';
+      statusElement.className = 'connection-status connected';
+      statusText.textContent = 'Connected';
       statusIcon.textContent = '✅';
     } else {
       throw new Error('Connection failed');
     }
   } catch (error) {
-    statusElement.className = 'status-bar disconnected';
-    statusText.textContent = 'Connection failed';
+    statusElement.className = 'connection-status disconnected';
+    statusText.textContent = 'Disconnected';
     statusIcon.textContent = '❌';
   }
 }

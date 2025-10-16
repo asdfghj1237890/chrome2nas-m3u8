@@ -31,19 +31,45 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
   color: white;
 }
 
-.header h1 {
-  font-size: 18px;
-  font-weight: 600;
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.connection-status.connected .status-icon {
+  filter: brightness(1.2);
+}
+
+.connection-status.disconnected {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.status-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.status-text {
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .icon-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
   width: 36px;
   height: 36px;
@@ -56,13 +82,15 @@ html, body {
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.5);
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .icon-btn:active {
   transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .icon-btn svg {
@@ -73,25 +101,8 @@ html, body {
   transform: rotate(180deg);
 }
 
-/* Status Bar */
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-  font-size: 13px;
-}
-
-.status-bar.connected {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.status-bar.disconnected {
-  background: #ffebee;
-  color: #c62828;
+#refreshBtn:active svg {
+  transform: rotate(360deg);
 }
 
 /* Sections */
@@ -117,39 +128,6 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   color: #555;
-}
-
-.small-btn {
-  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 6px rgba(74, 144, 226, 0.3);
-}
-
-.small-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(80, 201, 195, 0.5);
-  background: linear-gradient(135deg, #5FA3F5 0%, #6DD5D0 100%);
-}
-
-.small-btn:active {
-  transform: scale(0.95);
-}
-
-.small-btn svg {
-  transition: transform 0.6s ease;
-}
-
-.small-btn:active svg {
-  transform: rotate(360deg);
 }
 
 /* URL List */
@@ -215,18 +193,22 @@ html, body {
 
 .btn-send {
   flex: 1;
-  background: #667eea;
+  background: linear-gradient(135deg, #4A90E2 0%, #50C9C3 100%);
   color: white;
   border: none;
   border-radius: 4px;
   padding: 6px 12px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.2);
 }
 
 .btn-send:hover {
-  background: #5568d3;
+  background: linear-gradient(135deg, #5FA3F5 0%, #6DD5D0 100%);
+  box-shadow: 0 3px 6px rgba(74, 144, 226, 0.3);
+  transform: translateY(-1px);
 }
 
 .btn-copy {
@@ -315,7 +297,7 @@ html, body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(90deg, #4A90E2 0%, #50C9C3 100%);
   transition: width 0.3s;
 }
 

@@ -113,8 +113,7 @@ chrome2nas-m3u8/
 │   └── options/         # Extension options page
 ├── docker/              # Docker services
 │   ├── api/            # FastAPI service
-│   ├── worker/         # Download worker
-│   └── nginx/          # Nginx reverse proxy
+│   └── worker/         # Download worker
 └── docs/               # Additional documentation
 ```
 

@@ -117,10 +117,10 @@ ssh your-username@synology-ip
 # Create main docker directory
 sudo mkdir -p /volume1/docker
 
-# Create download directories
-sudo mkdir -p /volume1/xxxxx/downloads/{completed,processing,failed}
+# Create download directory
+sudo mkdir -p /volume1/xxxxx/downloads/completed
 
-# Set proper permissions for download directories (adjust user:group as needed)
+# Set proper permissions for download directory (adjust user:group as needed)
 sudo chown -R 1026:100 /volume1/xxxxx/downloads
 ```
 
@@ -131,11 +131,8 @@ sudo chown -R 1026:100 /volume1/xxxxx/downloads
 >   volumes:
 >     - /your/custom/path:/downloads  # Change this path
 >   ```
-> - **Required Structure**: The download folder **must** contain three subdirectories:
->   - `completed/` - Successfully downloaded files
->   - `processing/` - Files currently being processed
->   - `failed/` - Failed downloads for review
-> - If you change the download location, ensure these subdirectories exist before starting the services.
+> - **Required Structure**: The download folder will contain a `completed/` subdirectory where all successfully downloaded files are stored. The system tracks job status (pending/downloading/completed/failed) in the database, not through separate folders.
+> - If you change the download location, ensure the directory exists and has proper permissions before starting the services.
 
 ### Step 4: Download and Extract Release
 
@@ -549,7 +546,7 @@ docker stats m3u8_worker_1 m3u8_worker_2
 
 2. **Enable HTTPS** (Production)
    - Use Synology's reverse proxy with SSL
-   - Or configure nginx with Let's Encrypt
+   - Or configure a reverse proxy (Caddy, Traefik) with Let's Encrypt
 
 3. **Restrict Access**
    - Use firewall rules

@@ -42,18 +42,11 @@ This document provides detailed architecture diagrams and explanations for the C
 │  │              Docker Compose Network                       │  │
 │  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────┐     │  │
-│  │  │  nginx (Reverse Proxy)                          │     │  │
-│  │  │  • SSL termination                              │     │  │
-│  │  │  • Rate limiting                                │     │  │
-│  │  │  Port: 443 → 8000                              │     │  │
-│  │  └──────────────────┬──────────────────────────────┘     │  │
-│  │                     ↓                                     │  │
-│  │  ┌─────────────────────────────────────────────────┐     │  │
 │  │  │  API Gateway (FastAPI)                          │     │  │
 │  │  │  • Authentication                               │     │  │
 │  │  │  • Job management                               │     │  │
 │  │  │  • Status tracking                              │     │  │
-│  │  │  Port: 8000                                     │     │  │
+│  │  │  Port: 52052 (exposed)                          │     │  │
 │  │  └──────────────┬──────────────┬───────────────────┘     │  │
 │  │                 ↓              ↓                          │  │
 │  │   ┌─────────────────┐  ┌─────────────────┐              │  │
@@ -673,8 +666,8 @@ Logs
 │   ├─→ Rotation: Daily
 │   └─→ Retention: 30 days
 │
-├─→ Access Logs (nginx)
-│   └─→ Format: Combined
+├─→ Access Logs (FastAPI)
+│   └─→ Format: JSON
 │
 └─→ Error Logs
     └─→ Level: ERROR, CRITICAL
@@ -730,9 +723,8 @@ Internet
 │ │ Docker Host                     │ │
 │ │                                 │ │
 │ │ docker-compose.yml              │ │
-│ │ ├─→ nginx (reverse proxy)      │ │
-│ │ │   └─→ SSL cert (Let's Encrypt)│ │
 │ │ ├─→ api (FastAPI)               │ │
+│ │ │   └─→ Port 52052               │ │
 │ │ ├─→ worker1 (Python)            │ │
 │ │ ├─→ worker2 (Python)            │ │
 │ │ ├─→ db (PostgreSQL)             │ │

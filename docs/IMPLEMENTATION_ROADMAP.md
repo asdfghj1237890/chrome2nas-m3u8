@@ -25,7 +25,6 @@ Before starting implementation:
 docker/
 ├── docker-compose.yml
 ├── .dockerignore
-├── nginx.conf (optional reverse proxy)
 └── init-db.sql
 ```
 

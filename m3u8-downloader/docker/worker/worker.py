@@ -198,6 +198,10 @@ class DownloadWorker:
             
             logger.info(f"Found {playlist_info['segment_count']} segments, duration: {playlist_info['duration']}s")
             
+            # Check for encryption
+            if playlist_info.get('has_encryption'):
+                logger.info("Video is encrypted, will decrypt during download")
+            
             # Step 2: Download segments (5% - 85%)
             logger.info("Step 2: Downloading segments")
             temp_dir = tempfile.mkdtemp(prefix=f"m3u8_{job_id}_")
@@ -206,7 +210,9 @@ class DownloadWorker:
                 segments=playlist_info['segments'],
                 output_dir=temp_dir,
                 headers=headers,
-                max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2))
+                max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2)),
+                encryption_key=playlist_info.get('encryption_key'),
+                encryption_iv=playlist_info.get('encryption_iv')
             )
             
             def progress_callback(completed, total):

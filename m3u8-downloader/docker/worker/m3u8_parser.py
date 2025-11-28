@@ -136,8 +136,12 @@ class M3U8Parser:
         
         logger.info(f"Found {len(segments)} segments, total duration: {total_duration:.1f}s")
         
-        # Check if encrypted
-        has_encryption = any(seg.key for seg in playlist.segments if seg.key)
+        # Check if encrypted and get encryption info
+        encryption_info = self._get_encryption_info(playlist)
+        has_encryption = encryption_info is not None
+        
+        if has_encryption:
+            logger.info(f"Playlist is encrypted with {encryption_info['method']}")
         
         return {
             'segments': segments,
@@ -145,19 +149,46 @@ class M3U8Parser:
             'segment_count': len(segments),
             'is_variant': False,
             'has_encryption': has_encryption,
+            'encryption_key': encryption_info.get('key') if encryption_info else None,
+            'encryption_iv': encryption_info.get('iv') if encryption_info else None,
             'base_url': playlist.base_uri or self.url
         }
     
-    def get_encryption_key(self, playlist: m3u8.M3U8) -> Optional[bytes]:
-        """Get encryption key if playlist is encrypted"""
+    def _get_encryption_info(self, playlist: m3u8.M3U8) -> Optional[Dict]:
+        """Get encryption key and IV if playlist is encrypted"""
         for segment in playlist.segments:
             if segment.key and segment.key.method == 'AES-128':
-                key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
-                logger.info(f"Fetching encryption key: {key_url}")
-                response = requests.get(key_url, headers=self.headers, verify=False)
-                response.raise_for_status()
-                return response.content
+                try:
+                    key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
+                    logger.info(f"Fetching encryption key: {key_url}")
+                    response = requests.get(key_url, headers=self.headers, verify=False, timeout=30)
+                    response.raise_for_status()
+                    key = response.content
+                    
+                    # Get IV from key info or use default
+                    iv = None
+                    if segment.key.iv:
+                        # IV is usually specified as hex string like 0x...
+                        iv_str = segment.key.iv
+                        if iv_str.startswith('0x') or iv_str.startswith('0X'):
+                            iv = bytes.fromhex(iv_str[2:])
+                        else:
+                            iv = bytes.fromhex(iv_str)
+                    
+                    return {
+                        'method': 'AES-128',
+                        'key': key,
+                        'iv': iv
+                    }
+                except Exception as e:
+                    logger.error(f"Failed to fetch encryption key: {e}")
+                    return None
         return None
+    
+    def get_encryption_key(self, playlist: m3u8.M3U8) -> Optional[bytes]:
+        """Get encryption key if playlist is encrypted (deprecated, use _get_encryption_info)"""
+        info = self._get_encryption_info(playlist)
+        return info.get('key') if info else None
 
 
 def parse_m3u8(url: str, headers: Optional[Dict] = None) -> Dict:

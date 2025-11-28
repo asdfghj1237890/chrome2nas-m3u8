@@ -13,6 +13,9 @@ aiofiles==23.2.1
 # M3U8 parsing
 m3u8==3.5.0
 
+# Encryption (AES-128 for HLS)
+pycryptodome==3.19.0
+
 # Utilities
 python-dotenv==1.0.0
 

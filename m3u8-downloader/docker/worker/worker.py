@@ -56,7 +56,7 @@ class DownloadWorker:
     def update_job_status(self, job_id: str, status: str, progress: int = None, 
                          error_message: str = None, file_path: str = None, 
                          file_size: int = None):
-        """Update job status in database"""
+        """Update job status in database (won't overwrite 'cancelled' status)"""
         try:
             updates = {"status": status}
             
@@ -79,14 +79,17 @@ class DownloadWorker:
             if file_size:
                 updates["file_size"] = file_size
             
-            # Build UPDATE query
+            # Build UPDATE query - don't overwrite if job is cancelled
             set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
-            query = f"UPDATE jobs SET {set_clause} WHERE id = :job_id"
+            query = f"UPDATE jobs SET {set_clause} WHERE id = :job_id AND status != 'cancelled'"
             updates["job_id"] = job_id
             
-            self.db.execute(text(query), updates)
+            result = self.db.execute(text(query), updates)
             self.db.commit()
-            logger.info(f"Job {job_id} status updated to {status}")
+            
+            if result.rowcount > 0:
+                logger.info(f"Job {job_id} status updated to {status}")
+            # If rowcount is 0, job might be cancelled - don't log to reduce noise
         
         except Exception as e:
             logger.error(f"Failed to update job status: {e}")
@@ -129,9 +132,34 @@ class DownloadWorker:
             logger.error(f"Failed to get job details: {e}")
             return None
     
+    def is_job_cancelled(self, job_id: str) -> bool:
+        """Check if job has been cancelled - uses fresh DB connection to avoid cache"""
+        try:
+            # Use a fresh session to avoid SQLAlchemy caching and transaction isolation issues
+            fresh_db = SessionLocal()
+            try:
+                result = fresh_db.execute(text(
+                    "SELECT status FROM jobs WHERE id = :job_id"
+                ), {"job_id": job_id})
+                row = result.first()
+                is_cancelled = row and row.status == 'cancelled'
+                if is_cancelled:
+                    logger.info(f"Job {job_id} detected as cancelled")
+                return is_cancelled
+            finally:
+                fresh_db.close()
+        except Exception as e:
+            logger.error(f"Failed to check job status: {e}")
+            return False
+    
     def process_job(self, job_id: str):
         """Process a download job (supports both m3u8 and mp4)"""
         logger.info(f"Processing job {job_id}")
+        
+        # Check if job was cancelled before we start
+        if self.is_job_cancelled(job_id):
+            logger.info(f"Job {job_id} was cancelled, skipping")
+            return
         
         # Get job details
         job = self.get_job_details(job_id)
@@ -205,15 +233,37 @@ class DownloadWorker:
             
             logger.info(f"Downloading {total_size / 1024 / 1024:.2f} MB to {output_file}")
             
+            check_interval = 5 * 1024 * 1024  # Check cancellation every 5MB
+            bytes_since_check = 0
+            
             with open(output_file, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
                         downloaded_size += len(chunk)
+                        bytes_since_check += len(chunk)
                         
                         if total_size > 0:
                             progress = int((downloaded_size / total_size) * 95)
                             self.update_job_status(job_id, "downloading", progress=progress)
+                        
+                        # Check for cancellation periodically
+                        if bytes_since_check >= check_interval:
+                            bytes_since_check = 0
+                            if self.is_job_cancelled(job_id):
+                                logger.info(f"Job {job_id} was cancelled during download, aborting")
+                                response.close()
+                                # Clean up partial file
+                                if Path(output_file).exists():
+                                    Path(output_file).unlink()
+                                return
+            
+            # Final cancellation check before marking complete
+            if self.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id} was cancelled, cleaning up")
+                if Path(output_file).exists():
+                    Path(output_file).unlink()
+                return
             
             # Get final file size
             file_size = Path(output_file).stat().st_size
@@ -311,6 +361,11 @@ class DownloadWorker:
             )
             
             def progress_callback(completed, total):
+                # Check for cancellation FIRST (before updating status)
+                if self.is_job_cancelled(job_id):
+                    logger.info(f"Job {job_id} was cancelled during segment download, aborting")
+                    raise Exception("Job cancelled by user")
+                
                 # Map download progress to 5-85%
                 download_progress = int(5 + (completed / total) * 80)
                 self.update_job_status(job_id, "downloading", progress=download_progress)
@@ -335,6 +390,12 @@ class DownloadWorker:
             
             logger.info(f"Downloaded {len(segment_files)} segments")
             self.update_job_status(job_id, "downloading", progress=85)
+            
+            # Check for cancellation before merging
+            if self.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id} was cancelled before merge, cleaning up")
+                downloader.cleanup()
+                raise Exception("Job cancelled by user")
             
             # Step 3: Merge with FFmpeg (85% - 95%)
             logger.info("Step 3: Merging segments with FFmpeg")
@@ -380,6 +441,13 @@ class DownloadWorker:
             logger.info("Step 4: Cleaning up temporary files")
             downloader.cleanup()
             
+            # Final cancellation check before marking complete
+            if self.is_job_cancelled(job_id):
+                logger.info(f"Job {job_id} was cancelled, cleaning up output file")
+                if Path(output_file).exists():
+                    Path(output_file).unlink()
+                raise Exception("Job cancelled by user")
+            
             # Mark as completed
             self.update_job_status(
                 job_id, 
@@ -406,6 +474,11 @@ class DownloadWorker:
     
     def _handle_job_failure(self, job_id: str, job: dict, error_str: str):
         """Handle job failure with retry logic"""
+        # Check if job was cancelled by user - don't update status or retry
+        if "cancelled by user" in error_str.lower():
+            logger.info(f"Job {job_id} was cancelled by user, no action needed")
+            return
+        
         # Check if error is due to 403/474 (URL expired/blocked) - do not retry
         if "403/474 errors" in error_str or "URL expired or blocked" in error_str:
             logger.warning(f"Job {job_id} failed with URL expiration/blocking error - not retrying")

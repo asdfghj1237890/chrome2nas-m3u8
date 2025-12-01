@@ -226,8 +226,13 @@ html, body {
 
 /* Job Item */
 .job-item {
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.job-item:hover {
+  background: #fafafa;
 }
 
 .job-item:last-child {
@@ -237,8 +242,8 @@ html, body {
 .job-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .job-title {
@@ -249,17 +254,20 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 .job-status {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .job-status.pending {
-  background: #fff3e0;
+  background: #fff8e1;
   color: #f57c00;
 }
 
@@ -269,42 +277,106 @@ html, body {
 }
 
 .job-status.processing {
-  background: #f3e5f5;
+  background: #ede7f6;
   color: #7b1fa2;
 }
 
 .job-status.completed {
   background: #e8f5e9;
-  color: #388e3c;
+  color: #2e7d32;
 }
 
 .job-status.failed {
   background: #ffebee;
-  color: #d32f2f;
+  color: #c62828;
+}
+
+.job-status.cancelled {
+  background: #eceff1;
+  color: #607d8b;
 }
 
 .job-progress {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.job-progress .progress-container {
+  flex: 1;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-cancel:hover {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.btn-cancel:active {
+  background: #ffcdd2;
+}
+
+.progress-container {
+  flex: 1;
+  min-width: 0;
 }
 
 .progress-bar {
   width: 100%;
-  height: 4px;
-  background: #e0e0e0;
-  border-radius: 2px;
+  height: 6px;
+  background: #e8e8e8;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #4A90E2 0%, #50C9C3 100%);
-  transition: width 0.3s;
+  transition: width 0.3s ease;
+  border-radius: 3px;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .progress-text {
   font-size: 11px;
-  color: #999;
+  color: #666;
   margin-top: 4px;
+  font-weight: 500;
 }
 
 /* Empty State */

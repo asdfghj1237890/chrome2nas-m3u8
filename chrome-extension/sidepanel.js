@@ -190,22 +190,47 @@ function renderJobs() {
     return;
   }
 
-  listElement.innerHTML = jobs.map(job => `
+  listElement.innerHTML = jobs.map(job => {
+    const canCancel = ['pending', 'downloading', 'processing'].includes(job.status);
+    const showProgress = job.status === 'downloading' || job.status === 'processing';
+    return `
     <div class="job-item">
       <div class="job-header">
         <div class="job-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</div>
-        <div class="job-status ${job.status}">${job.status}</div>
+        <div class="job-status ${job.status}">${getStatusLabel(job.status)}</div>
       </div>
-      ${job.status === 'downloading' || job.status === 'processing' ? `
+      ${showProgress || canCancel ? `
         <div class="job-progress">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: ${job.progress}%"></div>
-          </div>
-          <div class="progress-text">${job.progress}%</div>
+          ${showProgress ? `
+            <div class="progress-container">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: ${job.progress}%"></div>
+              </div>
+              <div class="progress-text">${job.progress}%</div>
+            </div>
+          ` : '<div class="progress-container"></div>'}
+          ${canCancel ? `
+            <button class="btn-cancel" data-job-id="${job.id}" title="Cancel download">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="m15 9-6 6M9 9l6 6"/>
+              </svg>
+              Cancel
+            </button>
+          ` : ''}
         </div>
       ` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
+
+  // Add event listeners to cancel buttons
+  listElement.querySelectorAll('.btn-cancel').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const jobId = e.target.dataset.jobId;
+      cancelJob(jobId);
+    });
+  });
 }
 
 
@@ -238,6 +263,35 @@ async function sendToNAS(url, pageUrl) {
   } catch (error) {
     console.error('Error:', error);
     showToast('❌ Failed to send');
+  }
+}
+
+// Cancel job on NAS
+async function cancelJob(jobId) {
+  if (!settings.nasEndpoint || !settings.apiKey) {
+    showToast('❌ NAS not configured');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${settings.nasEndpoint}/api/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${settings.apiKey}`
+      }
+    });
+
+    if (response.ok) {
+      showToast('🛑 Job cancelled');
+      // Refresh jobs list
+      await loadRecentJobs();
+    } else {
+      const error = await response.json();
+      showToast(`❌ ${error.detail || 'Failed to cancel'}`);
+    }
+  } catch (error) {
+    console.error('Error cancelling job:', error);
+    showToast('❌ Failed to cancel job');
   }
 }
 
@@ -276,6 +330,18 @@ function showToast(message) {
 function truncateUrl(url, maxLength = 60) {
   if (url.length <= maxLength) return url;
   return url.substring(0, maxLength) + '...';
+}
+
+function getStatusLabel(status) {
+  const labels = {
+    'pending': '⏳ Pending',
+    'downloading': '⬇️ Downloading',
+    'processing': '⚙️ Processing',
+    'completed': '✅ Completed',
+    'failed': '❌ Failed',
+    'cancelled': '🚫 Cancelled'
+  };
+  return labels[status] || status;
 }
 
 function escapeHtml(text) {

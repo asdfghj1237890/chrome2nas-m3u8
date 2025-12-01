@@ -274,7 +274,7 @@ async def delete_job(
     try:
         result = db.execute(text("""
             UPDATE jobs SET status = 'cancelled'
-            WHERE id = :job_id AND status IN ('pending', 'downloading')
+            WHERE id = :job_id AND status IN ('pending', 'downloading', 'processing')
         """), {"job_id": job_id})
         
         db.commit()

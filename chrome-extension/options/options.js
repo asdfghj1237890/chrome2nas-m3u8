@@ -1,4 +1,4 @@
-// Options Page Script for Chrome2NAS M3U8 Downloader
+// Options Page Script for Chrome2NAS Video Downloader
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Load saved settings

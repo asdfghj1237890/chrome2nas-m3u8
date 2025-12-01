@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Chrome2NAS M3U8 Downloader",
-  "version": "1.0.0",
-  "description": "Send m3u8 video streams to your NAS for download",
+  "version": "1.4.0",
+  "description": "Send m3u8 and mp4 videos to your NAS for download",
   "permissions": [
     "storage",
     "contextMenus",
@@ -19,7 +19,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Open M3U8 Downloader",
+    "default_title": "Open Video Downloader",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

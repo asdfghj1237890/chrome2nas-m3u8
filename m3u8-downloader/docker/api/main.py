@@ -1,6 +1,6 @@
 """
-Chrome2NAS M3U8 Downloader - API Gateway
-FastAPI application for managing download jobs
+Chrome2NAS Video Downloader - API Gateway
+FastAPI application for managing download jobs (M3U8 and MP4)
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
@@ -30,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI
 app = FastAPI(
-    title="Chrome2NAS M3U8 Downloader API",
-    description="API for managing m3u8 video downloads",
-    version="1.0.0"
+    title="Chrome2NAS Video Downloader API",
+    description="API for managing video downloads (M3U8 and MP4)",
+    version="1.1.0"
 )
 
 # CORS middleware
@@ -60,11 +60,12 @@ class DownloadRequest(BaseModel):
     source_page: Optional[str] = None
 
     @field_validator('url')
-    def validate_m3u8_url(cls, v):
-        url_str = str(v)
-        # Check if URL contains .m3u8 (allow query parameters)
-        if '.m3u8' not in url_str:
-            raise ValueError('URL must contain .m3u8')
+    def validate_video_url(cls, v):
+        url_str = str(v).lower()
+        # Check if URL contains supported video formats
+        is_valid = '.m3u8' in url_str or '.mp4' in url_str
+        if not is_valid:
+            raise ValueError('URL must contain .m3u8 or .mp4')
         return v
 
 class JobResponse(BaseModel):

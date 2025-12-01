@@ -1,4 +1,4 @@
-// Sidepanel Script for Chrome2NAS M3U8 Downloader
+// Sidepanel Script for Chrome2NAS Video Downloader
 
 let settings = {};
 let detectedUrls = [];
@@ -103,7 +103,7 @@ function renderDetectedUrls() {
   if (detectedUrls.length === 0) {
     listElement.innerHTML = `
       <div class="empty-state">
-        <p>🔍 No M3U8 URLs detected yet</p>
+        <p>🔍 No videos detected yet</p>
         <p class="hint">Browse to a video streaming site</p>
       </div>
     `;
@@ -112,9 +112,11 @@ function renderDetectedUrls() {
 
   listElement.innerHTML = detectedUrls.map((urlInfo, index) => {
     const hasIp = containsIpAddress(urlInfo.url);
+    const urlLower = urlInfo.url.toLowerCase();
+    const videoType = urlLower.includes('.mp4') ? 'MP4' : 'M3U8';
     return `
     <div class="url-item">
-      <div class="url-title">M3U8 URL ${index + 1}</div>
+      <div class="url-title">${videoType} #${index + 1}</div>
       <div class="url-link" title="${urlInfo.url}">${truncateUrl(urlInfo.url)}</div>
       ${hasIp ? `
         <div class="ip-warning">

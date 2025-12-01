@@ -1,21 +1,22 @@
-// Background Service Worker for M3U8 Detection and Download Management
+// Background Service Worker for Video Detection and Download Management
 
-// Store detected m3u8 URLs
+// Store detected video URLs (m3u8, mp4)
 let detectedUrls = new Set();
 let currentTabUrls = {};
 
-// Listen for web requests to detect m3u8 URLs
+// Listen for web requests to detect video URLs (m3u8, mp4)
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
-    const url = details.url;
+    const urlLower = details.url.toLowerCase();
     
-    // Check if URL contains .m3u8
-    if (url.includes('.m3u8')) {
-      console.log('Detected m3u8 URL:', url);
+    // Check if URL contains video file extensions
+    const isVideo = urlLower.includes('.m3u8') || urlLower.includes('.mp4');
+    if (isVideo) {
+      console.log('Detected video URL:', details.url);
       
-      // Store URL with tab info
+      // Store URL with tab info (preserve original URL case)
       const urlInfo = {
-        url: url,
+        url: details.url,
         tabId: details.tabId,
         timestamp: Date.now(),
         pageUrl: details.initiator || details.documentUrl
@@ -77,18 +78,20 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   let url = info.linkUrl || info.pageUrl;
   
-  // Check if it's an m3u8 URL
-  if (url && url.includes('.m3u8')) {
+  // Check if it's a video URL (m3u8 or mp4)
+  const urlLower = url ? url.toLowerCase() : '';
+  const isVideoUrl = urlLower.includes('.m3u8') || urlLower.includes('.mp4');
+  if (url && isVideoUrl) {
     sendToNAS(url, tab.title, tab.url);
   } else {
-    // Try to find m3u8 URL in current tab
+    // Try to find video URL in current tab
     const tabUrls = currentTabUrls[tab.id];
     if (tabUrls && tabUrls.length > 0) {
-      // Send the most recent m3u8 URL
+      // Send the most recent video URL
       const latest = tabUrls[tabUrls.length - 1];
       sendToNAS(latest.url, tab.title, tab.url);
     } else {
-      showNotification('Error', 'No m3u8 URL found on this page');
+      showNotification('Error', 'No video URL found on this page');
     }
   }
 });
@@ -249,4 +252,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 });
 
-console.log('Chrome2NAS M3U8 Downloader background service worker loaded');
+console.log('Chrome2NAS Video Downloader background service worker loaded');

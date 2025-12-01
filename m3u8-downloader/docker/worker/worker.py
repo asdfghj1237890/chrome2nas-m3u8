@@ -130,7 +130,7 @@ class DownloadWorker:
             return None
     
     def process_job(self, job_id: str):
-        """Process a download job with real m3u8 downloading"""
+        """Process a download job (supports both m3u8 and mp4)"""
         logger.info(f"Processing job {job_id}")
         
         # Get job details
@@ -139,7 +139,102 @@ class DownloadWorker:
             logger.error(f"Job {job_id} not found")
             return
         
-        # Import download modules
+        # Determine download type based on URL
+        url_lower = job['url'].lower()
+        is_direct_download = url_lower.endswith('.mp4') or '.mp4?' in url_lower
+        
+        if is_direct_download:
+            self._process_direct_download(job_id, job)
+        else:
+            self._process_m3u8_download(job_id, job)
+    
+    def _process_direct_download(self, job_id: str, job: dict):
+        """Process direct file download (MP4, etc.)"""
+        import requests
+        from pathlib import Path
+        
+        try:
+            # Update status to downloading
+            self.update_job_status(job_id, "downloading", progress=0)
+            logger.info(f"Starting direct download: {job['url']}")
+            
+            # Prepare headers
+            headers = job.get('headers', {})
+            if job.get('referer'):
+                headers['Referer'] = job['referer']
+            if job.get('source_page'):
+                parsed = urlparse(job['source_page'])
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+                headers['Origin'] = origin
+            if 'User-Agent' not in headers:
+                headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+            
+            logger.info(f"Request headers: {headers}")
+            
+            # Prepare output path
+            safe_title = "".join(c for c in job['title'] if c.isalnum() or c in (' ', '-', '_')).strip()
+            if not safe_title:
+                safe_title = f"video_{job_id[:8]}"
+            
+            output_dir = Path("/downloads/completed")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            base_name = safe_title
+            output_file = output_dir / f"{base_name}.mp4"
+            counter = 1
+            
+            while output_file.exists():
+                output_file = output_dir / f"{base_name} ({counter}).mp4"
+                counter += 1
+            
+            output_file = str(output_file)
+            
+            # Stream download with progress
+            response = requests.get(
+                job['url'],
+                headers=headers,
+                stream=True,
+                timeout=30,
+                verify=False
+            )
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+            chunk_size = 1024 * 1024  # 1MB chunks
+            
+            logger.info(f"Downloading {total_size / 1024 / 1024:.2f} MB to {output_file}")
+            
+            with open(output_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        if total_size > 0:
+                            progress = int((downloaded_size / total_size) * 95)
+                            self.update_job_status(job_id, "downloading", progress=progress)
+            
+            # Get final file size
+            file_size = Path(output_file).stat().st_size
+            
+            # Mark as completed
+            self.update_job_status(
+                job_id,
+                "completed",
+                progress=100,
+                file_path=output_file,
+                file_size=file_size
+            )
+            
+            logger.info(f"Job {job_id} completed successfully: {output_file} ({file_size / 1024 / 1024:.2f} MB)")
+        
+        except Exception as e:
+            logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+            self._handle_job_failure(job_id, job, str(e))
+    
+    def _process_m3u8_download(self, job_id: str, job: dict):
+        """Process m3u8 stream download"""
         from m3u8_parser import parse_m3u8
         from downloader import SegmentDownloader
         from ffmpeg_wrapper import merge_segments
@@ -152,7 +247,7 @@ class DownloadWorker:
         try:
             # Update status to downloading
             self.update_job_status(job_id, "downloading", progress=0)
-            logger.info(f"Starting download: {job['url']}")
+            logger.info(f"Starting m3u8 download: {job['url']}")
             
             # Step 1: Parse m3u8 playlist (5%)
             logger.info("Step 1: Parsing m3u8 playlist")
@@ -298,37 +393,7 @@ class DownloadWorker:
         
         except Exception as e:
             logger.error(f"Job {job_id} failed: {e}", exc_info=True)
-            
-            error_str = str(e)
-            
-            # Check if error is due to 403/474 (URL expired/blocked) - do not retry
-            if "403/474 errors" in error_str or "URL expired or blocked" in error_str:
-                logger.warning(f"Job {job_id} failed with URL expiration/blocking error - not retrying")
-                self.update_job_status(
-                    job_id,
-                    "failed",
-                    error_message=error_str
-                )
-            else:
-                # Update retry count for other errors
-                retry_count = job.get("retry_count", 0) + 1
-                
-                if retry_count < MAX_RETRY_ATTEMPTS:
-                    # Retry: put back in queue
-                    logger.info(f"Retrying job {job_id} (attempt {retry_count})")
-                    self.db.execute(text("""
-                        UPDATE jobs SET retry_count = :retry_count, status = 'pending'
-                        WHERE id = :job_id
-                    """), {"retry_count": retry_count, "job_id": job_id})
-                    self.db.commit()
-                    redis_client.rpush("download_queue", job_id)
-                else:
-                    # Max retries reached: mark as failed
-                    self.update_job_status(
-                        job_id, 
-                        "failed",
-                        error_message=error_str
-                    )
+            self._handle_job_failure(job_id, job, str(e))
         
         finally:
             # Cleanup temp directory
@@ -338,6 +403,37 @@ class DownloadWorker:
                     logger.info(f"Cleaned up temp directory: {temp_dir}")
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp directory: {e}")
+    
+    def _handle_job_failure(self, job_id: str, job: dict, error_str: str):
+        """Handle job failure with retry logic"""
+        # Check if error is due to 403/474 (URL expired/blocked) - do not retry
+        if "403/474 errors" in error_str or "URL expired or blocked" in error_str:
+            logger.warning(f"Job {job_id} failed with URL expiration/blocking error - not retrying")
+            self.update_job_status(
+                job_id,
+                "failed",
+                error_message=error_str
+            )
+        else:
+            # Update retry count for other errors
+            retry_count = job.get("retry_count", 0) + 1
+            
+            if retry_count < MAX_RETRY_ATTEMPTS:
+                # Retry: put back in queue
+                logger.info(f"Retrying job {job_id} (attempt {retry_count})")
+                self.db.execute(text("""
+                    UPDATE jobs SET retry_count = :retry_count, status = 'pending'
+                    WHERE id = :job_id
+                """), {"retry_count": retry_count, "job_id": job_id})
+                self.db.commit()
+                redis_client.rpush("download_queue", job_id)
+            else:
+                # Max retries reached: mark as failed
+                self.update_job_status(
+                    job_id, 
+                    "failed",
+                    error_message=error_str
+                )
     
     def run(self):
         """Main worker loop"""

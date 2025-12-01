@@ -365,17 +365,13 @@ class DownloadWorker:
             logger.info("Step 2: Downloading segments")
             temp_dir = tempfile.mkdtemp(prefix=f"m3u8_{job_id}_")
             
-            # Create segment-specific headers - some CDNs expect Referer to be the m3u8 URL
+            # For segments, keep the original source page Referer (as browsers do)
+            # The downloader will try multiple Referer strategies if this fails
             segment_headers = headers.copy()
-            m3u8_base_url = playlist_info.get('base_url', job['url'])
-            parsed_m3u8 = urlparse(m3u8_base_url)
-            m3u8_origin = f"{parsed_m3u8.scheme}://{parsed_m3u8.netloc}"
             
-            # Use m3u8 URL as Referer for segments (common anti-hotlink bypass)
-            segment_headers['Referer'] = m3u8_base_url
-            segment_headers['Origin'] = m3u8_origin
-            logger.info(f"Segment Referer set to: {m3u8_base_url}")
-            logger.info(f"Segment Origin set to: {m3u8_origin}")
+            # Log what Referer/Origin we're using
+            logger.info(f"Segment Referer: {segment_headers.get('Referer', 'None')}")
+            logger.info(f"Segment Origin: {segment_headers.get('Origin', 'None')}")
             
             downloader = SegmentDownloader(
                 segments=playlist_info['segments'],
@@ -383,7 +379,8 @@ class DownloadWorker:
                 headers=segment_headers,
                 max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2)),
                 encryption_key=playlist_info.get('encryption_key'),
-                encryption_iv=playlist_info.get('encryption_iv')
+                encryption_iv=playlist_info.get('encryption_iv'),
+                m3u8_url=job['url']  # Pass m3u8 URL for Referer strategies
             )
             
             def progress_callback(completed, total):

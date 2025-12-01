@@ -4,6 +4,9 @@
 let detectedUrls = new Set();
 let currentTabUrls = {};
 
+// Store captured request headers for m3u8 URLs
+let capturedHeaders = {};
+
 // Listen for web requests to detect video URLs (m3u8, mp4)
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
@@ -39,6 +42,50 @@ chrome.webRequest.onBeforeRequest.addListener(
     }
   },
   { urls: ["<all_urls>"] }
+);
+
+// Capture actual request headers sent by the browser for video URLs
+// This includes cookies that Chrome would send to the video domain
+chrome.webRequest.onSendHeaders.addListener(
+  function(details) {
+    const urlLower = details.url.toLowerCase();
+    
+    // Only capture headers for video URLs
+    if (urlLower.includes('.m3u8') || urlLower.includes('.mp4')) {
+      // Convert headers array to object
+      const headersObj = {};
+      if (details.requestHeaders) {
+        for (const header of details.requestHeaders) {
+          // Skip some internal headers
+          if (!header.name.toLowerCase().startsWith(':')) {
+            headersObj[header.name] = header.value;
+          }
+        }
+      }
+      
+      // Store headers keyed by URL
+      capturedHeaders[details.url] = {
+        headers: headersObj,
+        timestamp: Date.now(),
+        initiator: details.initiator || details.documentUrl,
+        tabId: details.tabId
+      };
+      
+      console.log('Captured headers for:', details.url);
+      console.log('Headers:', headersObj);
+      
+      // Clean up old entries (keep only last 100)
+      const keys = Object.keys(capturedHeaders);
+      if (keys.length > 100) {
+        const oldest = keys.sort((a, b) => 
+          capturedHeaders[a].timestamp - capturedHeaders[b].timestamp
+        ).slice(0, keys.length - 100);
+        oldest.forEach(k => delete capturedHeaders[k]);
+      }
+    }
+  },
+  { urls: ["<all_urls>"] },
+  ["requestHeaders"]
 );
 
 // Update badge with count of detected URLs
@@ -113,41 +160,81 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     // Clean up title
     title = title.replace(/[<>:"/\\|?*]/g, '').substring(0, 100);
     
-    // Get cookies for the source page domain
-    let cookieHeader = '';
-    try {
-      const pageUrlObj = new URL(pageUrl);
-      const cookies = await chrome.cookies.getAll({ url: pageUrl });
+    // First, try to use captured headers for this exact URL
+    let finalHeaders = {};
+    const captured = capturedHeaders[url];
+    
+    if (captured && captured.headers) {
+      console.log('Using captured browser headers for:', url);
+      finalHeaders = { ...captured.headers };
       
-      console.log(`Getting cookies for URL: ${pageUrl}`);
-      console.log(`Found ${cookies.length} cookies`);
-      
-      if (cookies.length > 0) {
-        // Convert cookies to Cookie header format
-        cookieHeader = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
-        console.log(`Cookie header created (${cookieHeader.length} chars):`, cookieHeader.substring(0, 200));
-      } else {
-        console.warn(`No cookies found for ${pageUrlObj.hostname}`);
-      }
-    } catch (error) {
-      console.error('Failed to get cookies:', error);
+      // Remove headers that shouldn't be forwarded
+      delete finalHeaders['Host'];
+      delete finalHeaders['Connection'];
+      delete finalHeaders['Content-Length'];
+      delete finalHeaders['Accept-Encoding']; // Let the worker handle compression
     }
     
-    // Prepare request
+    // Also get cookies for the source page domain (fallback)
+    try {
+      const pageUrlObj = new URL(pageUrl);
+      const pageCookies = await chrome.cookies.getAll({ url: pageUrl });
+      
+      console.log(`Getting cookies for source page: ${pageUrl}`);
+      console.log(`Found ${pageCookies.length} cookies`);
+      
+      // If we don't have captured cookies, use page cookies
+      if (!finalHeaders['Cookie'] && pageCookies.length > 0) {
+        finalHeaders['Cookie'] = pageCookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+        console.log('Using source page cookies as fallback');
+      }
+    } catch (error) {
+      console.error('Failed to get page cookies:', error);
+    }
+    
+    // Also get cookies for the m3u8 URL domain
+    try {
+      const m3u8UrlObj = new URL(url);
+      const m3u8Cookies = await chrome.cookies.getAll({ url: url });
+      
+      console.log(`Getting cookies for m3u8 URL: ${url}`);
+      console.log(`Found ${m3u8Cookies.length} cookies for m3u8 domain`);
+      
+      if (m3u8Cookies.length > 0) {
+        const m3u8CookieStr = m3u8Cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+        // Merge with existing cookies if any
+        if (finalHeaders['Cookie']) {
+          // Combine both, avoiding duplicates
+          const existingCookies = new Set(finalHeaders['Cookie'].split('; '));
+          m3u8CookieStr.split('; ').forEach(c => existingCookies.add(c));
+          finalHeaders['Cookie'] = Array.from(existingCookies).join('; ');
+        } else {
+          finalHeaders['Cookie'] = m3u8CookieStr;
+        }
+        console.log('Added m3u8 domain cookies');
+      }
+    } catch (error) {
+      console.error('Failed to get m3u8 domain cookies:', error);
+    }
+    
+    // Prepare request body
     const requestBody = {
       url: url,
       title: title,
       source_page: pageUrl,
       referer: pageUrl,
-      headers: cookieHeader ? { 'Cookie': cookieHeader } : {}
+      headers: finalHeaders
     };
     
     console.log('Sending to NAS:');
     console.log('  URL:', requestBody.url);
     console.log('  Title:', requestBody.title);
     console.log('  Referer:', requestBody.referer);
-    console.log('  Headers:', requestBody.headers);
+    console.log('  Headers keys:', Object.keys(requestBody.headers));
     console.log('  Has Cookie:', !!requestBody.headers.Cookie);
+    if (requestBody.headers.Cookie) {
+      console.log('  Cookie preview:', requestBody.headers.Cookie.substring(0, 200));
+    }
     
     // Send to NAS API
     const response = await fetch(`${settings.nasEndpoint}/api/download`, {

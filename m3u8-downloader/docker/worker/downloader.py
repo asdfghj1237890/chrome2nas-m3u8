@@ -9,10 +9,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Callable
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 import urllib3
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
-from ssl_adapter import create_legacy_session
+from ssl_adapter import create_legacy_session, create_impersonated_session
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -40,7 +41,9 @@ class SegmentDownloader:
         max_retries: int = 3,
         timeout: int = 30,
         encryption_key: Optional[bytes] = None,
-        encryption_iv: Optional[bytes] = None
+        encryption_iv: Optional[bytes] = None,
+        m3u8_url: Optional[str] = None,
+        session=None
     ):
         self.segments = segments
         self.output_dir = Path(output_dir)
@@ -50,13 +53,19 @@ class SegmentDownloader:
         self.timeout = timeout
         self.encryption_key = encryption_key
         self.encryption_iv = encryption_iv
+        self.m3u8_url = m3u8_url
         
         self.downloaded_count = 0
         self.total_segments = len(segments)
         self.failed_segments = []
         
-        # Create session with legacy SSL support
-        self.session = create_legacy_session()
+        # Track which Referer strategy worked (for logging)
+        self.working_referer_strategy = None
+        
+        # Use provided session or create impersonated session for anti-bot bypass
+        # curl_cffi with Chrome TLS fingerprint helps bypass CDN anti-hotlinking
+        self.session = session if session else create_impersonated_session()
+        logger.info(f"Segment downloader using session type: {type(self.session).__name__}")
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -154,13 +163,94 @@ class SegmentDownloader:
             logger.warning(f"Decryption failed for segment {segment_index}: {e}")
             return data  # Return original data if decryption fails
     
+    def _get_referer_strategies(self, segment_url: str) -> List[Dict[str, str]]:
+        """
+        Generate different Referer/Origin header combinations to try.
+        Some CDNs have specific requirements for these headers.
+        """
+        strategies = []
+        
+        # Parse URLs for building strategies
+        segment_parsed = urlparse(segment_url)
+        segment_origin = f"{segment_parsed.scheme}://{segment_parsed.netloc}"
+        
+        original_referer = self.headers.get('Referer', '')
+        original_origin = self.headers.get('Origin', '')
+        
+        # Strategy 1: Original headers (source page as Referer) - already tried
+        strategies.append({
+            'name': 'source_page',
+            'Referer': original_referer,
+            'Origin': original_origin
+        })
+        
+        # Strategy 2: Use segment's own domain as Referer (same-origin request simulation)
+        strategies.append({
+            'name': 'segment_domain',
+            'Referer': segment_origin + '/',
+            'Origin': segment_origin
+        })
+        
+        # Strategy 3: Use m3u8 URL as Referer
+        if self.m3u8_url:
+            m3u8_parsed = urlparse(self.m3u8_url)
+            m3u8_origin = f"{m3u8_parsed.scheme}://{m3u8_parsed.netloc}"
+            strategies.append({
+                'name': 'm3u8_url',
+                'Referer': self.m3u8_url,
+                'Origin': m3u8_origin
+            })
+        
+        # Strategy 4: No Referer/Origin (some servers allow this)
+        strategies.append({
+            'name': 'no_referer',
+            'Referer': None,
+            'Origin': None
+        })
+        
+        return strategies
+    
+    def _try_download_with_headers(self, url: str, headers: Dict, index: int) -> Optional[bytes]:
+        """Try downloading a segment with specific headers, returns content or None"""
+        try:
+            response = self.session.get(
+                url,
+                headers=headers,
+                timeout=self.timeout,
+                stream=False
+            )
+            
+            # Log response cookies for debugging
+            if response.cookies and index == 0:
+                logger.info(f"Response set cookies: {dict(response.cookies)}")
+            
+            if response.status_code == 474:
+                logger.debug(f"Segment {index} got 474 error with current headers")
+                return None
+            
+            response.raise_for_status()
+            content = response.content
+            
+            if len(content) < 188:
+                return None
+            
+            # Check if response is an anti-hotlink image
+            if content[:3] == JPEG_MAGIC or content[:4] == PNG_MAGIC or content[:4] == GIF_MAGIC:
+                return None
+            
+            return content
+            
+        except Exception as e:
+            logger.debug(f"Download attempt failed: {e}")
+            return None
+    
     def download_segment(
         self, 
         segment: Dict, 
         retry_count: int = 0
     ) -> Optional[str]:
         """
-        Download a single segment
+        Download a single segment with multiple Referer strategies
         
         Args:
             segment: Segment info dict with 'url', 'index'
@@ -176,33 +266,82 @@ class SegmentDownloader:
         try:
             logger.debug(f"Downloading segment {index}: {url}")
             
-            # Log headers for first segment to help debug anti-hotlink issues
+            # Log headers for first segment
             if index == 0 and retry_count == 0:
                 logger.info(f"Segment download headers: {self.headers}")
                 logger.info(f"First segment URL: {url}")
             
-            response = self.session.get(
-                url,
-                headers=self.headers,
-                timeout=self.timeout,
-                stream=False  # Don't stream, we need full content for validation
-            )
+            content = None
+            used_strategy = None
             
-            # Debug: Log response details on error
-            if response.status_code == 474:
-                logger.error(f"Segment {index} got 474 error")
-                logger.error(f"Response headers: {dict(response.headers)}")
-                error_content = response.text[:500] if hasattr(response, 'text') else "No content"
-                logger.error(f"Error content: {error_content}")
+            # If we already found a working strategy, use it directly
+            if self.working_referer_strategy and retry_count == 0:
+                strategy = self.working_referer_strategy
+                headers = self.headers.copy()
+                if strategy.get('Referer'):
+                    headers['Referer'] = strategy['Referer']
+                elif 'Referer' in headers and strategy.get('Referer') is None:
+                    del headers['Referer']
+                if strategy.get('Origin'):
+                    headers['Origin'] = strategy['Origin']
+                elif 'Origin' in headers and strategy.get('Origin') is None:
+                    del headers['Origin']
+                
+                content = self._try_download_with_headers(url, headers, index)
+                if content:
+                    used_strategy = strategy['name']
             
-            response.raise_for_status()
+            # If no working strategy yet, or it failed, try all strategies
+            if content is None:
+                strategies = self._get_referer_strategies(url)
+                
+                for strategy in strategies:
+                    headers = self.headers.copy()
+                    
+                    # Apply strategy headers
+                    if strategy.get('Referer'):
+                        headers['Referer'] = strategy['Referer']
+                    elif 'Referer' in headers and strategy.get('Referer') is None:
+                        del headers['Referer']
+                    
+                    if strategy.get('Origin'):
+                        headers['Origin'] = strategy['Origin']
+                    elif 'Origin' in headers and strategy.get('Origin') is None:
+                        del headers['Origin']
+                    
+                    if index == 0 and retry_count == 0:
+                        logger.info(f"Trying Referer strategy: {strategy['name']}")
+                    
+                    content = self._try_download_with_headers(url, headers, index)
+                    
+                    if content:
+                        used_strategy = strategy['name']
+                        # Remember this strategy for future segments
+                        if self.working_referer_strategy is None:
+                            logger.info(f"Found working Referer strategy: {strategy['name']}")
+                            self.working_referer_strategy = strategy
+                        break
             
-            # Get raw content
-            content = response.content
-            
-            # Check content size
-            if len(content) < 188:  # Minimum TS packet size
-                raise ValueError(f"Segment too small: {len(content)} bytes")
+            # If all strategies failed, use original headers and let the error handling below deal with it
+            if content is None:
+                response = self.session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                    stream=False
+                )
+                
+                if response.status_code == 474:
+                    logger.error(f"Segment {index} got 474 error")
+                    logger.error(f"Response headers: {dict(response.headers)}")
+                    error_content = response.text[:500] if hasattr(response, 'text') else "No content"
+                    logger.error(f"Error content: {error_content}")
+                
+                response.raise_for_status()
+                content = response.content
+                
+                if len(content) < 188:
+                    raise ValueError(f"Segment too small: {len(content)} bytes")
             
             # Decrypt if encryption key is set
             if self.encryption_key:
@@ -211,8 +350,6 @@ class SegmentDownloader:
             # Validate content is actually a TS file (not an error page)
             is_valid, error_reason = self._is_valid_ts_content(content)
             if not is_valid:
-                # Check if this looks like encrypted data that we couldn't decrypt
-                # In that case, still save it and let ffmpeg try to handle it
                 skip_validation = os.environ.get('SKIP_TS_VALIDATION', 'false').lower() == 'true'
                 
                 # Always skip validation for encrypted streams where decryption produced non-image data
@@ -221,7 +358,6 @@ class SegmentDownloader:
                 elif skip_validation:
                     logger.warning(f"Segment {index}: {error_reason} - validation skipped")
                 else:
-                    # Log first 200 bytes for debugging
                     preview = content[:200]
                     logger.error(f"Segment {index}: {error_reason}")
                     logger.error(f"Content preview (first 200 bytes): {preview}")
@@ -231,7 +367,11 @@ class SegmentDownloader:
             with open(output_path, 'wb') as f:
                 f.write(content)
             
-            logger.debug(f"Segment {index} downloaded and validated successfully ({len(content)} bytes)")
+            if index == 0 and used_strategy:
+                logger.info(f"Segment {index} downloaded successfully with strategy: {used_strategy}")
+            else:
+                logger.debug(f"Segment {index} downloaded and validated successfully ({len(content)} bytes)")
+            
             return str(output_path)
         
         except Exception as e:
@@ -342,7 +482,9 @@ def download_segments(
     max_workers: int = 10,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     encryption_key: Optional[bytes] = None,
-    encryption_iv: Optional[bytes] = None
+    encryption_iv: Optional[bytes] = None,
+    m3u8_url: Optional[str] = None,
+    session=None
 ) -> List[str]:
     """
     Convenience function to download segments
@@ -355,6 +497,8 @@ def download_segments(
         progress_callback: Optional callback(completed, total)
         encryption_key: Optional AES-128 encryption key
         encryption_iv: Optional AES-128 IV
+        m3u8_url: Optional m3u8 URL (for Referer strategy)
+        session: Optional requests session (for cookie persistence)
     
     Returns:
         List of downloaded file paths
@@ -365,7 +509,9 @@ def download_segments(
         headers=headers,
         max_workers=max_workers,
         encryption_key=encryption_key,
-        encryption_iv=encryption_iv
+        encryption_iv=encryption_iv,
+        m3u8_url=m3u8_url,
+        session=session
     )
     
     return downloader.download_all(progress_callback)

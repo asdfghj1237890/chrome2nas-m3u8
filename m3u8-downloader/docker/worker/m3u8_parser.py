@@ -64,22 +64,28 @@ class M3U8Parser:
             # Fetch playlist content
             content = self.fetch_playlist()
             
+            # Log first 500 chars of content to diagnose parsing issues
+            content_preview = content[:500] if len(content) > 500 else content
+            logger.info(f"Playlist content preview ({len(content)} bytes):\n{content_preview}")
+            
             # Parse with m3u8 library
             playlist = m3u8.loads(content, uri=self.url)
             
             # Check if this is a master playlist (with variants)
             if playlist.is_variant:
                 logger.info("Master playlist detected, selecting best quality")
-                return self._parse_master_playlist(playlist)
+                return self._parse_master_playlist(playlist, content)
             else:
                 logger.info("Media playlist detected")
-                return self._parse_media_playlist(playlist)
+                # Debug: log segment count before parsing
+                logger.debug(f"Raw playlist has {len(playlist.segments)} segments, {len(playlist.playlists)} playlists")
+                return self._parse_media_playlist(playlist, content)
         
         except Exception as e:
             logger.error(f"Failed to parse m3u8: {e}")
             raise
     
-    def _parse_master_playlist(self, playlist: m3u8.M3U8) -> Dict:
+    def _parse_master_playlist(self, playlist: m3u8.M3U8, content: str = None) -> Dict:
         """Parse master playlist and select best quality variant"""
         if not playlist.playlists:
             raise ValueError("No variants found in master playlist")
@@ -108,13 +114,13 @@ class M3U8Parser:
         variant_content = variant_parser.fetch_playlist()
         variant_playlist = m3u8.loads(variant_content, uri=variant_url)
         
-        result = self._parse_media_playlist(variant_playlist)
+        result = self._parse_media_playlist(variant_playlist, variant_content)
         result['resolution'] = resolution
         result['selected_variant_url'] = variant_url
         
         return result
     
-    def _parse_media_playlist(self, playlist: m3u8.M3U8) -> Dict:
+    def _parse_media_playlist(self, playlist: m3u8.M3U8, content: str = None) -> Dict:
         """Parse media playlist and extract segment URLs"""
         segments = []
         total_duration = 0.0
@@ -132,6 +138,10 @@ class M3U8Parser:
             total_duration += segment.duration
         
         if not segments:
+            # Log the actual content for debugging
+            if content:
+                content_preview = content[:1000] if len(content) > 1000 else content
+                logger.error(f"Playlist content (no segments found):\n{content_preview}")
             raise ValueError("No segments found in playlist")
         
         logger.info(f"Found {len(segments)} segments, total duration: {total_duration:.1f}s")
@@ -165,15 +175,27 @@ class M3U8Parser:
                     response.raise_for_status()
                     key = response.content
                     
+                    # Validate key length (AES-128 requires 16 bytes)
+                    logger.info(f"Encryption key length: {len(key)} bytes")
+                    if len(key) != 16:
+                        logger.warning(f"Unexpected key length: {len(key)} bytes (expected 16)")
+                        # Some servers return key with extra whitespace or headers
+                        if len(key) > 16:
+                            logger.info(f"Key preview (first 32 bytes): {key[:32]}")
+                    
                     # Get IV from key info or use default
                     iv = None
                     if segment.key.iv:
                         # IV is usually specified as hex string like 0x...
                         iv_str = segment.key.iv
+                        logger.info(f"IV from m3u8: {iv_str}")
                         if iv_str.startswith('0x') or iv_str.startswith('0X'):
                             iv = bytes.fromhex(iv_str[2:])
                         else:
                             iv = bytes.fromhex(iv_str)
+                        logger.info(f"Parsed IV length: {len(iv)} bytes, value: {iv.hex()}")
+                    else:
+                        logger.info("No IV specified in m3u8, will use segment sequence number")
                     
                     return {
                         'method': 'AES-128',

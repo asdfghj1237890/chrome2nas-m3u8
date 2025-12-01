@@ -318,6 +318,20 @@ class DownloadWorker:
             if 'User-Agent' not in headers:
                 headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
             
+            # Add additional browser-like headers to bypass anti-hotlinking
+            if 'Accept' not in headers:
+                headers['Accept'] = '*/*'
+            if 'Accept-Language' not in headers:
+                headers['Accept-Language'] = 'en-US,en;q=0.9'
+            if 'Accept-Encoding' not in headers:
+                headers['Accept-Encoding'] = 'gzip, deflate, br'
+            if 'Sec-Fetch-Dest' not in headers:
+                headers['Sec-Fetch-Dest'] = 'empty'
+            if 'Sec-Fetch-Mode' not in headers:
+                headers['Sec-Fetch-Mode'] = 'cors'
+            if 'Sec-Fetch-Site' not in headers:
+                headers['Sec-Fetch-Site'] = 'cross-site'
+            
             # Debug: Log headers to verify
             logger.info(f"Request headers: {headers}")
             if 'Cookie' in headers:
@@ -351,10 +365,22 @@ class DownloadWorker:
             logger.info("Step 2: Downloading segments")
             temp_dir = tempfile.mkdtemp(prefix=f"m3u8_{job_id}_")
             
+            # Create segment-specific headers - some CDNs expect Referer to be the m3u8 URL
+            segment_headers = headers.copy()
+            m3u8_base_url = playlist_info.get('base_url', job['url'])
+            parsed_m3u8 = urlparse(m3u8_base_url)
+            m3u8_origin = f"{parsed_m3u8.scheme}://{parsed_m3u8.netloc}"
+            
+            # Use m3u8 URL as Referer for segments (common anti-hotlink bypass)
+            segment_headers['Referer'] = m3u8_base_url
+            segment_headers['Origin'] = m3u8_origin
+            logger.info(f"Segment Referer set to: {m3u8_base_url}")
+            logger.info(f"Segment Origin set to: {m3u8_origin}")
+            
             downloader = SegmentDownloader(
                 segments=playlist_info['segments'],
                 output_dir=temp_dir,
-                headers=headers,
+                headers=segment_headers,
                 max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2)),
                 encryption_key=playlist_info.get('encryption_key'),
                 encryption_iv=playlist_info.get('encryption_iv')
@@ -370,9 +396,19 @@ class DownloadWorker:
                 download_progress = int(5 + (completed / total) * 80)
                 self.update_job_status(job_id, "downloading", progress=download_progress)
                 
-                # Check if too many segments failed with 403/474 errors during download
+                # Check if too many segments failed during download
                 failed_count = len(downloader.failed_segments)
-                if failed_count > 20:
+                if failed_count > 5:
+                    # Count anti-hotlink protection errors
+                    hotlink_count = sum(
+                        1 for item in downloader.failed_segments 
+                        if 'anti-hotlinking' in item['error'].lower() or 'JPEG' in item['error'] or 'PNG' in item['error']
+                    )
+                    
+                    if hotlink_count >= 5:
+                        logger.error(f"Anti-hotlinking protection detected: {hotlink_count} segments blocked")
+                        raise Exception(f"Download aborted: Server blocked segment downloads (anti-hotlinking protection). Try refreshing the source page and retrying.")
+                    
                     # Count HTTP 403/474 errors
                     http_error_count = sum(
                         1 for item in downloader.failed_segments 

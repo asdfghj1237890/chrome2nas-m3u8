@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 TS_SYNC_BYTE = b'\x47'
 TS_PACKET_SIZE = 188
 
+# Common file magic bytes for detecting anti-hotlink responses
+JPEG_MAGIC = b'\xff\xd8\xff'
+PNG_MAGIC = b'\x89PNG'
+GIF_MAGIC = b'GIF8'
+
 
 class SegmentDownloader:
     """Download video segments with multi-threading and retry logic"""
@@ -56,22 +61,30 @@ class SegmentDownloader:
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
-    def _is_valid_ts_content(self, data: bytes) -> bool:
+    def _is_valid_ts_content(self, data: bytes) -> tuple[bool, str]:
         """
         Validate if the content is a valid MPEG-TS file.
-        Returns False if it looks like HTML/text error page.
+        Returns (is_valid, error_reason) tuple.
         """
         if not data or len(data) < TS_PACKET_SIZE:
-            return False
+            return False, "Content too small"
+        
+        # Check for image files (anti-hotlinking protection)
+        if data[:3] == JPEG_MAGIC:
+            return False, "Server returned JPEG image (anti-hotlinking protection)"
+        if data[:4] == PNG_MAGIC:
+            return False, "Server returned PNG image (anti-hotlinking protection)"
+        if data[:4] == GIF_MAGIC:
+            return False, "Server returned GIF image (anti-hotlinking protection)"
         
         # Check if it starts with HTML (error page)
         if data[:5].lower() in (b'<!doc', b'<html', b'<?xml'):
-            return False
+            return False, "Server returned HTML error page"
         
         # Check for common error text patterns
         lower_start = data[:500].lower()
         if b'error' in lower_start or b'forbidden' in lower_start or b'denied' in lower_start:
-            return False
+            return False, "Server returned error response"
         
         # Check for TS sync byte at expected positions
         # TS packets are 188 bytes, sync byte should appear at 0, 188, 376, etc.
@@ -81,32 +94,62 @@ class SegmentDownloader:
                 sync_count += 1
         
         # If we found sync bytes at expected positions, it's likely valid
-        return sync_count >= 2
+        if sync_count >= 2:
+            return True, ""
+        
+        return False, "Invalid TS format (no sync bytes found)"
     
     def _decrypt_segment(self, data: bytes, segment_index: int) -> bytes:
         """Decrypt AES-128 encrypted segment"""
         if not self.encryption_key:
             return data
         
-        try:
-            # Use provided IV or derive from segment index
-            if self.encryption_iv:
-                iv = self.encryption_iv
+        # Log key info on first segment
+        if segment_index == 0:
+            logger.info(f"Encryption key (first 4 bytes): {self.encryption_key[:4].hex()}")
+            if self.encryption_iv is not None:
+                logger.info(f"Using provided IV: {self.encryption_iv.hex()}")
             else:
-                # Default IV is segment sequence number as 16-byte big-endian
-                iv = segment_index.to_bytes(16, byteorder='big')
+                logger.info("No IV provided, will use segment index")
+        
+        try:
+            # Try multiple IV strategies
+            iv_strategies = []
             
-            cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
-            decrypted = cipher.decrypt(data)
+            # Strategy 1: Use provided IV if specified (HLS spec compliant)
+            if self.encryption_iv is not None:
+                iv_strategies.append(("provided IV", self.encryption_iv))
             
-            # Remove PKCS7 padding
-            try:
-                decrypted = unpad(decrypted, AES.block_size)
-            except ValueError:
-                # Some streams don't use proper padding
-                pass
+            # Strategy 2: Use segment index as IV (common non-compliant streams)
+            iv_strategies.append(("segment index IV", segment_index.to_bytes(16, byteorder='big')))
             
+            # Strategy 3: Use zeros IV if not already tried
+            if self.encryption_iv is None or self.encryption_iv != bytes(16):
+                iv_strategies.append(("zeros IV", bytes(16)))
+            
+            for strategy_name, iv in iv_strategies:
+                cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
+                decrypted = cipher.decrypt(data)
+                
+                # Remove PKCS7 padding
+                try:
+                    decrypted = unpad(decrypted, AES.block_size)
+                except ValueError:
+                    # Some streams don't use proper padding
+                    pass
+                
+                # Check if decryption produced valid TS data
+                if decrypted[:1] == TS_SYNC_BYTE:
+                    if segment_index < 3:  # Log first few segments
+                        logger.info(f"Segment {segment_index}: Decryption successful with {strategy_name}")
+                    return decrypted
+            
+            # None of the strategies worked
+            logger.warning(f"Segment {segment_index}: All decryption strategies failed (first byte after zeros IV: {hex(decrypted[0]) if decrypted else 'empty'})")
+            
+            # Return the last decrypted result (with zeros IV) - let ffmpeg try to handle it
             return decrypted
+            
         except Exception as e:
             logger.warning(f"Decryption failed for segment {segment_index}: {e}")
             return data  # Return original data if decryption fails
@@ -132,6 +175,11 @@ class SegmentDownloader:
         
         try:
             logger.debug(f"Downloading segment {index}: {url}")
+            
+            # Log headers for first segment to help debug anti-hotlink issues
+            if index == 0 and retry_count == 0:
+                logger.info(f"Segment download headers: {self.headers}")
+                logger.info(f"First segment URL: {url}")
             
             response = self.session.get(
                 url,
@@ -161,12 +209,23 @@ class SegmentDownloader:
                 content = self._decrypt_segment(content, index)
             
             # Validate content is actually a TS file (not an error page)
-            if not self._is_valid_ts_content(content):
-                # Log first 200 bytes for debugging
-                preview = content[:200]
-                logger.error(f"Segment {index} content is not valid TS data")
-                logger.error(f"Content preview (first 200 bytes): {preview}")
-                raise ValueError(f"Invalid TS content - possibly HTML error page or encrypted data")
+            is_valid, error_reason = self._is_valid_ts_content(content)
+            if not is_valid:
+                # Check if this looks like encrypted data that we couldn't decrypt
+                # In that case, still save it and let ffmpeg try to handle it
+                skip_validation = os.environ.get('SKIP_TS_VALIDATION', 'false').lower() == 'true'
+                
+                # Always skip validation for encrypted streams where decryption produced non-image data
+                if self.encryption_key and not content[:3] in (JPEG_MAGIC, PNG_MAGIC[:3], GIF_MAGIC[:3]):
+                    logger.warning(f"Segment {index}: {error_reason} - saving anyway for ffmpeg to process")
+                elif skip_validation:
+                    logger.warning(f"Segment {index}: {error_reason} - validation skipped")
+                else:
+                    # Log first 200 bytes for debugging
+                    preview = content[:200]
+                    logger.error(f"Segment {index}: {error_reason}")
+                    logger.error(f"Content preview (first 200 bytes): {preview}")
+                    raise ValueError(error_reason)
             
             # Write validated content to file
             with open(output_path, 'wb') as f:

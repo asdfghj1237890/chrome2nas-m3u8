@@ -5,7 +5,6 @@ Multi-threaded downloader for m3u8 video segments
 
 import logging
 import os
-import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Callable
 import time
@@ -13,6 +12,7 @@ from pathlib import Path
 import urllib3
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
+from ssl_adapter import create_legacy_session
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -49,6 +49,9 @@ class SegmentDownloader:
         self.downloaded_count = 0
         self.total_segments = len(segments)
         self.failed_segments = []
+        
+        # Create session with legacy SSL support
+        self.session = create_legacy_session()
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -130,12 +133,11 @@ class SegmentDownloader:
         try:
             logger.debug(f"Downloading segment {index}: {url}")
             
-            response = requests.get(
+            response = self.session.get(
                 url,
                 headers=self.headers,
                 timeout=self.timeout,
-                stream=False,  # Don't stream, we need full content for validation
-                verify=False
+                stream=False  # Don't stream, we need full content for validation
             )
             
             # Debug: Log response details on error

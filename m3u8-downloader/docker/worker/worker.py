@@ -178,8 +178,8 @@ class DownloadWorker:
     
     def _process_direct_download(self, job_id: str, job: dict):
         """Process direct file download (MP4, etc.)"""
-        import requests
         from pathlib import Path
+        from ssl_adapter import create_legacy_session
         
         try:
             # Update status to downloading
@@ -217,13 +217,13 @@ class DownloadWorker:
             
             output_file = str(output_file)
             
-            # Stream download with progress
-            response = requests.get(
+            # Stream download with progress (using legacy SSL for compatibility)
+            session = create_legacy_session()
+            response = session.get(
                 job['url'],
                 headers=headers,
                 stream=True,
-                timeout=30,
-                verify=False
+                timeout=30
             )
             response.raise_for_status()
             

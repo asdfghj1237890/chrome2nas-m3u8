@@ -4,11 +4,11 @@ Parse m3u8 playlists and extract segment information
 """
 
 import logging
-import requests
 from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Optional
 import m3u8
 import urllib3
+from ssl_adapter import create_legacy_session
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -22,6 +22,7 @@ class M3U8Parser:
         self.url = url
         self.headers = headers or {}
         self.base_url = self._get_base_url(url)
+        self.session = create_legacy_session()
         
     def _get_base_url(self, url: str) -> str:
         """Extract base URL from m3u8 URL"""
@@ -36,12 +37,11 @@ class M3U8Parser:
         """Fetch m3u8 playlist content"""
         try:
             logger.info(f"Fetching playlist: {self.url}")
-            response = requests.get(
+            response = self.session.get(
                 self.url, 
                 headers=self.headers,
                 timeout=30,
-                allow_redirects=True,
-                verify=False
+                allow_redirects=True
             )
             response.raise_for_status()
             return response.text
@@ -161,7 +161,7 @@ class M3U8Parser:
                 try:
                     key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
                     logger.info(f"Fetching encryption key: {key_url}")
-                    response = requests.get(key_url, headers=self.headers, verify=False, timeout=30)
+                    response = self.session.get(key_url, headers=self.headers, timeout=30)
                     response.raise_for_status()
                     key = response.content
                     

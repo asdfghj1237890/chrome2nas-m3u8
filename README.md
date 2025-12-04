@@ -6,12 +6,12 @@
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-red.svg)](https://developer.chrome.com/docs/extensions/)
 [![Release](https://img.shields.io/github/v/release/asdfghj1237890/chrome2nas-m3u8)](https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest)
 
-> Seamlessly capture m3u8 video streams from Chrome and download them to your NAS
+> Seamlessly capture M3U8 and MP4 video streams from Chrome and download them to your NAS
 
 ## Overview
 
 This system enables you to:
-1. 🔍 Detect m3u8 video stream URLs in Chrome
+1. 🔍 Detect M3U8 and MP4 video URLs in Chrome
 2. 📤 Send URLs to your NAS with one click
 3. ⬇️ Automatically download and convert to MP4
 4. 💾 Store videos on your NAS storage
@@ -21,6 +21,12 @@ This system enables you to:
 ```
 Chrome Extension → NAS Docker (API + Worker) → Video Storage
 ```
+
+![Overall System Architecture](pics/overall_system_architecture.png)
+
+### Backend Architecture
+
+![Backend Architecture](pics/backend_architecture.png)
 
 ## Quick Links
 
@@ -37,9 +43,11 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 ## Key Features
 
 ### Chrome Extension
-- ✅ Automatic m3u8 URL detection
+- ✅ Automatic M3U8 and MP4 URL detection
 - ✅ One-click send to NAS
+- ✅ Side panel interface for easy access
 - ✅ Real-time download progress
+- ✅ Cookie & header forwarding for authenticated streams
 - ✅ Context menu integration
 - ✅ Configurable NAS endpoint
 
@@ -88,9 +96,11 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
   - Progress tracking
   - Retry mechanism
 - [x] Phase 3: Chrome extension (URL detection, UI) ✅
-  - Automatic M3U8 detection
+  - Automatic M3U8 and MP4 detection
   - One-click send to NAS
+  - Side panel interface
   - Real-time progress monitoring
+  - Cookie & header forwarding
   - Settings management
   - Context menu integration
   - Badge notifications
@@ -162,17 +172,19 @@ For detailed instructions including Synology NAS setup, see **[INSTALL.md](INSTA
 You can now:
 - ✅ Deploy Docker stack on Synology NAS or any Docker host
 - ✅ Download M3U8 video streams to MP4
-- ✅ Use Chrome extension for automatic detection
-- ✅ Monitor download progress in real-time
+- ✅ Download MP4 videos directly
+- ✅ Use Chrome extension for automatic detection (M3U8 & MP4)
+- ✅ Forward cookies & headers for authenticated streams
+- ✅ Monitor download progress in side panel
 - ✅ Manage downloads via REST API
 
 ## Usage
 
 1. Browse to any video streaming site
-2. When m3u8 URL is detected, extension badge shows notification
-3. Click extension icon or right-click → "Send to NAS"
-4. Video downloads automatically to your NAS
-5. Monitor progress in extension popup
+2. When video URL (M3U8/MP4) is detected, extension badge shows notification
+3. Click extension icon to open side panel, or right-click → "Send to NAS"
+4. Video downloads automatically to your NAS (with cookies for authenticated streams)
+5. Monitor progress in the side panel
 6. Access completed videos in `/downloads/completed/`
 
 ## Configuration
@@ -197,8 +209,10 @@ The system runs **2 workers** by default for parallel processing:
 ### Extension Settings
 - **NAS Endpoint**: `https://192.168.1.100:52052`
 - **API Key**: Your configured API key
-- **Auto Detect**: Enable automatic m3u8 detection
+- **Auto Detect**: Enable automatic M3U8/MP4 detection
 - **Notifications**: Enable completion notifications
+
+> **Note**: Click the extension icon to open the side panel for managing detected videos and monitoring downloads.
 
 ## Security Notes
 
@@ -225,8 +239,9 @@ The system runs **2 workers** by default for parallel processing:
 
 ### Download fails
 - Check logs: `docker-compose logs worker`
-- Verify m3u8 URL is accessible
+- Verify video URL is accessible
 - Check disk space on NAS
+- For authenticated streams, ensure cookies are being captured
 
 ### Slow downloads
 - Reduce concurrent downloads in .env
@@ -262,8 +277,8 @@ MIT License - See LICENSE file for details
 ---
 
 **Status**: Core Features Complete | Production Ready  
-**Version**: 1.3.0
-**Last Updated**: 2025-10-17  
+**Version**: 1.4.0  
+**Last Updated**: 2025-12-04  
 **Port**: 52052 (unified)
 
 ## Star History

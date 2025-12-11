@@ -168,10 +168,27 @@ class DownloadWorker:
             return
         
         # Determine download type based on URL
+        # Check for MP4 in various forms:
+        # - URL ending with .mp4
+        # - .mp4? (with query string)
+        # - .mp4& or .mp4% (URL-encoded in query params, e.g., file=%2Fpath%2Fto%2Fvideo.mp4&)
+        from urllib.parse import unquote
         url_lower = job['url'].lower()
-        is_direct_download = url_lower.endswith('.mp4') or '.mp4?' in url_lower
+        url_decoded = unquote(url_lower)  # Decode %2F etc.
+        is_direct_download = (
+            url_lower.endswith('.mp4') or 
+            '.mp4?' in url_lower or
+            '.mp4&' in url_lower or
+            # Check decoded URL for .mp4 patterns
+            url_decoded.endswith('.mp4') or
+            '.mp4?' in url_decoded or
+            '.mp4&' in url_decoded or
+            # Check for file= parameter containing .mp4
+            ('file=' in url_lower and '.mp4' in url_decoded)
+        )
         
         if is_direct_download:
+            logger.info(f"Detected as direct download (MP4): {job['url'][:100]}...")
             self._process_direct_download(job_id, job)
         else:
             self._process_m3u8_download(job_id, job)
@@ -187,7 +204,14 @@ class DownloadWorker:
             logger.info(f"Starting direct download: {job['url']}")
             
             # Prepare headers
-            headers = job.get('headers', {})
+            headers = job.get('headers', {}).copy()
+            
+            # Remove headers that could cause issues with fresh downloads
+            headers.pop('Range', None)
+            headers.pop('range', None)
+            if headers.get('Sec-Fetch-Dest') == 'video':
+                headers['Sec-Fetch-Dest'] = 'empty'
+            
             if job.get('referer'):
                 headers['Referer'] = job['referer']
             if job.get('source_page'):
@@ -301,7 +325,15 @@ class DownloadWorker:
             
             # Step 1: Parse m3u8 playlist (5%)
             logger.info("Step 1: Parsing m3u8 playlist")
-            headers = job.get('headers', {})
+            headers = job.get('headers', {}).copy()
+            
+            # Remove headers that could cause issues with fresh downloads
+            # Range header from browser capture would cause partial downloads
+            headers.pop('Range', None)
+            headers.pop('range', None)
+            # Sec-Fetch-Dest=video is specific to video element requests
+            if headers.get('Sec-Fetch-Dest') == 'video':
+                headers['Sec-Fetch-Dest'] = 'empty'
             
             # Add critical headers for CORS and authentication
             if job.get('referer'):

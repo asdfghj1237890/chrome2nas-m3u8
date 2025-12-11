@@ -65,17 +65,76 @@ class M3U8Parser:
         return base
     
     def fetch_playlist(self) -> str:
-        """Fetch m3u8 playlist content"""
+        """Fetch m3u8 playlist content with early validation"""
         try:
             logger.info(f"Fetching playlist: {self.url}")
+            
+            # Use streaming to avoid downloading large non-m3u8 files
             response = self.session.get(
                 self.url, 
                 headers=self.headers,
                 timeout=30,
-                allow_redirects=True
+                allow_redirects=True,
+                stream=True
             )
             response.raise_for_status()
-            return response.text
+            
+            # Check content-type header for early detection
+            content_type = response.headers.get('Content-Type', '').lower()
+            logger.info(f"Response Content-Type: {content_type}")
+            
+            # Warn if content-type suggests non-m3u8 content
+            if content_type and not any(t in content_type for t in ['mpegurl', 'text', 'application/vnd.apple']):
+                if 'video' in content_type or 'octet-stream' in content_type:
+                    logger.warning(f"Content-Type suggests this is not an m3u8 playlist: {content_type}")
+            
+            # Check content-length to detect large files (likely not m3u8)
+            content_length = response.headers.get('Content-Length')
+            if content_length:
+                size_mb = int(content_length) / (1024 * 1024)
+                if size_mb > 1:  # m3u8 playlists are typically < 1MB
+                    logger.warning(f"Response is {size_mb:.1f}MB - likely not an m3u8 playlist")
+                    raise ValueError(f"Response too large ({size_mb:.1f}MB) - this appears to be a video file, not an m3u8 playlist")
+            
+            # Read first chunk to validate content
+            first_chunk = next(response.iter_content(chunk_size=8192), b'')
+            
+            # Check if content is binary (not text)
+            try:
+                first_text = first_chunk.decode('utf-8')
+            except UnicodeDecodeError:
+                logger.error("Response is binary data, not an m3u8 playlist")
+                raise ValueError("Response is binary data - this appears to be a video file, not an m3u8 playlist")
+            
+            # Check if it starts with #EXTM3U (required for m3u8)
+            if not first_text.strip().startswith('#EXTM3U'):
+                # Check for common binary signatures
+                if first_chunk[:4] in (b'\x00\x00\x00\x1c', b'\x00\x00\x00\x18', b'\x00\x00\x00\x20'):  # MP4 ftyp
+                    raise ValueError("Response is an MP4 file, not an m3u8 playlist")
+                if first_chunk[:3] == b'\xff\xd8\xff':  # JPEG
+                    raise ValueError("Response is a JPEG image, not an m3u8 playlist")
+                if first_chunk[:4] == b'\x89PNG':  # PNG
+                    raise ValueError("Response is a PNG image, not an m3u8 playlist")
+                
+                # Log first 200 chars for debugging
+                preview = first_text[:200] if len(first_text) > 200 else first_text
+                logger.warning(f"Content doesn't start with #EXTM3U: {preview}")
+            
+            # Read the rest of the content (with reasonable limit)
+            max_size = 10 * 1024 * 1024  # 10MB max for m3u8
+            content_parts = [first_chunk]
+            total_size = len(first_chunk)
+            
+            for chunk in response.iter_content(chunk_size=65536):
+                if chunk:
+                    content_parts.append(chunk)
+                    total_size += len(chunk)
+                    if total_size > max_size:
+                        raise ValueError(f"Response exceeds {max_size // 1024 // 1024}MB limit - not a valid m3u8 playlist")
+            
+            content = b''.join(content_parts).decode('utf-8')
+            return content
+            
         except Exception as e:
             logger.error(f"Failed to fetch playlist: {e}")
             raise

@@ -227,7 +227,7 @@ function renderJobs() {
   // Add event listeners to cancel buttons
   listElement.querySelectorAll('.btn-cancel').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const jobId = e.target.dataset.jobId;
+      const jobId = e.currentTarget.dataset.jobId;
       cancelJob(jobId);
     });
   });

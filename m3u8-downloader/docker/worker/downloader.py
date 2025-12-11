@@ -5,6 +5,7 @@ Multi-threaded downloader for m3u8 video segments
 
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Callable
 import time
@@ -59,6 +60,9 @@ class SegmentDownloader:
         self.total_segments = len(segments)
         self.failed_segments = []
         
+        # Stop event for cooperative cancellation
+        self._stop_event = threading.Event()
+        
         # Track which Referer strategy worked (for logging)
         self.working_referer_strategy = None
         
@@ -69,6 +73,15 @@ class SegmentDownloader:
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
+    
+    def request_stop(self):
+        """Request all download threads to stop"""
+        logger.info("Stop requested for segment downloader")
+        self._stop_event.set()
+    
+    def is_stop_requested(self) -> bool:
+        """Check if stop has been requested"""
+        return self._stop_event.is_set()
     
     def _is_valid_ts_content(self, data: bytes) -> tuple[bool, str]:
         """
@@ -259,6 +272,11 @@ class SegmentDownloader:
         Returns:
             Path to downloaded file or None if failed
         """
+        # Check if stop was requested before starting
+        if self._stop_event.is_set():
+            logger.debug(f"Segment {segment['index']} skipped - stop requested")
+            return None
+        
         url = segment['url']
         index = segment['index']
         output_path = self.output_dir / f"segment_{index:05d}.ts"
@@ -296,6 +314,11 @@ class SegmentDownloader:
                 strategies = self._get_referer_strategies(url)
                 
                 for strategy in strategies:
+                    # Check if stop was requested between strategy attempts
+                    if self._stop_event.is_set():
+                        logger.debug(f"Segment {index} aborted during strategy attempts - stop requested")
+                        return None
+                    
                     headers = self.headers.copy()
                     
                     # Apply strategy headers
@@ -377,6 +400,11 @@ class SegmentDownloader:
         except Exception as e:
             logger.warning(f"Failed to download segment {index} (attempt {retry_count + 1}): {e}")
             
+            # Check if stop was requested before retrying
+            if self._stop_event.is_set():
+                logger.debug(f"Segment {index} retry cancelled - stop requested")
+                return None
+            
             # Retry logic
             if retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)  # Exponential backoff
@@ -413,6 +441,13 @@ class SegmentDownloader:
             # Process completed downloads
             try:
                 for future in as_completed(future_to_segment):
+                    # Check if stop was requested before processing more results
+                    if self._stop_event.is_set():
+                        logger.info("Stop event detected in download_all, aborting...")
+                        for f in future_to_segment:
+                            f.cancel()
+                        break
+                    
                     segment = future_to_segment[future]
                     index = segment['index']
                     
@@ -431,9 +466,10 @@ class SegmentDownloader:
                         progress_callback(self.downloaded_count, self.total_segments)
             
             except Exception as e:
-                # Callback raised an exception (e.g., too many errors detected)
-                # Cancel all pending futures
-                logger.warning("Download aborted, cancelling remaining tasks...")
+                # Callback raised an exception (e.g., job cancelled or too many errors)
+                # Signal all threads to stop and cancel pending futures
+                logger.warning("Download aborted, signaling stop and cancelling remaining tasks...")
+                self._stop_event.set()
                 for future in future_to_segment:
                     future.cancel()
                 # Re-raise the exception

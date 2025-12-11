@@ -203,12 +203,10 @@ function renderJobs() {
         <div class="job-progress">
           ${showProgress ? `
             <div class="progress-container">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: ${job.progress}%"></div>
-              </div>
-              <div class="progress-text">${job.progress}%</div>
+              <div class="progress-fill" style="width: ${job.progress}%"></div>
             </div>
-          ` : '<div class="progress-container"></div>'}
+            <div class="progress-text">${job.progress}%</div>
+          ` : ''}
           ${canCancel ? `
             <button class="btn-cancel" data-job-id="${job.id}" title="Cancel download">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

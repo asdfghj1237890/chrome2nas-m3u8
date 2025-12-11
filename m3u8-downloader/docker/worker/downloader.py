@@ -134,6 +134,24 @@ class SegmentDownloader:
             else:
                 logger.info("No IV provided, will use segment index")
         
+        # Check if data is already valid TS content (not encrypted despite m3u8 claim)
+        # Some CDNs or caching layers decrypt content server-side
+        if data[:1] == TS_SYNC_BYTE:
+            if segment_index == 0:
+                logger.info("Segment 0: Data already appears to be valid TS (starts with sync byte), skipping decryption")
+            return data
+        
+        # AES-128-CBC requires input to be a multiple of 16 bytes
+        # If data isn't aligned, it's likely not encrypted or is corrupted
+        if len(data) % 16 != 0:
+            if segment_index == 0:
+                logger.warning(f"Segment 0: Data length ({len(data)}) is not 16-byte aligned - content may not be encrypted")
+            # Pad the data to attempt decryption anyway
+            padding_needed = 16 - (len(data) % 16)
+            padded_data = data + bytes(padding_needed)
+        else:
+            padded_data = data
+        
         try:
             # Try multiple IV strategies
             iv_strategies = []
@@ -149,9 +167,10 @@ class SegmentDownloader:
             if self.encryption_iv is None or self.encryption_iv != bytes(16):
                 iv_strategies.append(("zeros IV", bytes(16)))
             
+            decrypted = None
             for strategy_name, iv in iv_strategies:
                 cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
-                decrypted = cipher.decrypt(data)
+                decrypted = cipher.decrypt(padded_data)
                 
                 # Remove PKCS7 padding
                 try:

@@ -296,6 +296,13 @@ html, body {
   transition: width 0.3s ease;
 }
 
+.progress-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: right;
+}
+
 .btn-cancel {
   background: transparent;
   border: none;

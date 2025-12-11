@@ -13,6 +13,34 @@ jobs:
     steps:
       - name: 'Checkout code'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Generate changelog'
+        id: changelog
+        run: |
+          # Get current tag
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          
+          # Get previous tag
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -A1 "^${CURRENT_TAG}$" | tail -n1)
+          
+          # If no previous tag, use first commit
+          if [ -z "$PREVIOUS_TAG" ] || [ "$PREVIOUS_TAG" = "$CURRENT_TAG" ]; then
+            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+            echo "No previous tag found, using first commit"
+          fi
+          
+          echo "Previous tag: $PREVIOUS_TAG"
+          echo "Current tag: $CURRENT_TAG"
+          
+          # Generate commit log
+          CHANGELOG=$(git log ${PREVIOUS_TAG}..${CURRENT_TAG} --pretty=format:"- %s (%h)" --reverse)
+          
+          # Handle multiline output
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: 'Create chrome-extension package'
         run: |
@@ -30,4 +58,6 @@ jobs:
           files: |
             chrome2nas-m3u8-chrome-extension.zip
             chrome2nas-m3u8-downloader-docker.zip
-          generate_release_notes: true
+          body: |
+            ## What's Changed
+            ${{ steps.changelog.outputs.changelog }}

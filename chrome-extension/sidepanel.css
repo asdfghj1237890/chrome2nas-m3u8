@@ -305,6 +305,7 @@ html, body {
   border-radius: 4px;
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 
 .btn-cancel:hover {

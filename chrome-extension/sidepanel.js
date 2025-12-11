@@ -120,7 +120,7 @@ function renderDetectedUrls() {
       <div class="url-link" title="${urlInfo.url}">${truncateUrl(urlInfo.url)}</div>
       ${hasIp ? `
         <div class="ip-warning">
-          ⚠️ <strong>IP-Restricted URL Detected</strong><br>
+          <strong>IP-Restricted URL Detected</strong><br>
           This URL contains an IP address, meaning the website restricts downloads to that specific IP. 
           To download successfully, your NAS and PC must use the same IP address. 
           Use Tailscale exit node or similar VPN solution to route the traffic through a same IP address.
@@ -128,10 +128,10 @@ function renderDetectedUrls() {
       ` : ''}
       <div class="url-actions">
         <button class="btn-send" data-url="${escapeHtml(urlInfo.url)}" data-page="${escapeHtml(urlInfo.pageUrl || '')}">
-          📤 Send to NAS
+          Send to NAS
         </button>
         <button class="btn-copy" data-url="${escapeHtml(urlInfo.url)}">
-          📋
+          Copy
         </button>
       </div>
     </div>
@@ -184,7 +184,7 @@ function renderJobs() {
   if (jobs.length === 0) {
     listElement.innerHTML = `
       <div class="empty-state">
-        <p>📥 No recent downloads</p>
+        <p>No recent downloads</p>
       </div>
     `;
     return;
@@ -215,7 +215,7 @@ function renderJobs() {
                 <circle cx="12" cy="12" r="10"/>
                 <path d="m15 9-6 6M9 9l6 6"/>
               </svg>
-              Cancel
+              <span>Cancel</span>
             </button>
           ` : ''}
         </div>
@@ -255,14 +255,14 @@ async function sendToNAS(url, pageUrl) {
     });
 
     // Show feedback
-    showToast('📤 Sending to NAS...');
+    showToast('Sending to NAS...');
 
     // Refresh jobs after 2 seconds
     setTimeout(loadRecentJobs, 2000);
 
   } catch (error) {
     console.error('Error:', error);
-    showToast('❌ Failed to send');
+    showToast('Failed to send');
   }
 }
 
@@ -282,23 +282,23 @@ async function cancelJob(jobId) {
     });
 
     if (response.ok) {
-      showToast('🛑 Job cancelled');
+      showToast('Job cancelled');
       // Refresh jobs list
       await loadRecentJobs();
     } else {
       const error = await response.json();
-      showToast(`❌ ${error.detail || 'Failed to cancel'}`);
+      showToast(`${error.detail || 'Failed to cancel'}`);
     }
   } catch (error) {
     console.error('Error cancelling job:', error);
-    showToast('❌ Failed to cancel job');
+    showToast('Failed to cancel job');
   }
 }
 
 // Copy to clipboard
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
-    showToast('📋 Copied to clipboard');
+    showToast('Copied to clipboard');
   });
 }
 
@@ -334,12 +334,12 @@ function truncateUrl(url, maxLength = 60) {
 
 function getStatusLabel(status) {
   const labels = {
-    'pending': '⏳ Pending',
-    'downloading': '⬇️ Downloading',
-    'processing': '⚙️ Processing',
-    'completed': '✅ Completed',
-    'failed': '❌ Failed',
-    'cancelled': '🚫 Cancelled'
+    'pending': 'Pending',
+    'downloading': 'Downloading',
+    'processing': 'Processing',
+    'completed': 'Completed',
+    'failed': 'Failed',
+    'cancelled': 'Cancelled'
   };
   return labels[status] || status;
 }

@@ -10,6 +10,9 @@ requests==2.31.0
 aiohttp==3.9.1
 aiofiles==23.2.1
 
+# Brotli decompression support for requests
+brotli==1.1.0
+
 # Browser-like HTTP client with TLS fingerprint impersonation
 # This bypasses TLS fingerprinting (JA3) anti-bot detection
 curl_cffi==0.7.1

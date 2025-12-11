@@ -14,15 +14,46 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
+# Check if brotli is available for requests
+try:
+    import brotli
+    BROTLI_AVAILABLE = True
+except ImportError:
+    BROTLI_AVAILABLE = False
+    logger.warning("brotli package not installed - removing 'br' from Accept-Encoding headers")
+
 
 class M3U8Parser:
     """Parse m3u8 playlists and extract segment URLs"""
     
     def __init__(self, url: str, headers: Optional[Dict] = None):
         self.url = url
-        self.headers = headers or {}
+        self.headers = self._sanitize_headers(headers or {})
         self.base_url = self._get_base_url(url)
         self.session = create_legacy_session()
+    
+    def _sanitize_headers(self, headers: Dict) -> Dict:
+        """
+        Sanitize request headers to prevent decompression issues.
+        Removes 'br' (brotli) from Accept-Encoding if brotli is not available.
+        """
+        if BROTLI_AVAILABLE:
+            return headers
+        
+        sanitized = headers.copy()
+        accept_encoding = sanitized.get('Accept-Encoding', '')
+        
+        if 'br' in accept_encoding:
+            # Remove 'br' from Accept-Encoding
+            parts = [p.strip() for p in accept_encoding.split(',')]
+            parts = [p for p in parts if p.lower() != 'br']
+            if parts:
+                sanitized['Accept-Encoding'] = ', '.join(parts)
+            else:
+                sanitized.pop('Accept-Encoding', None)
+            logger.info(f"Sanitized Accept-Encoding: {accept_encoding} -> {sanitized.get('Accept-Encoding', '(removed)')}")
+        
+        return sanitized
         
     def _get_base_url(self, url: str) -> str:
         """Extract base URL from m3u8 URL"""

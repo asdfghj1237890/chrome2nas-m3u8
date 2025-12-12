@@ -22,29 +22,22 @@ Complete technical specification including:
 - Security requirements
 - Error handling
 
-#### [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md)
-Development roadmap and implementation plan:
-- Development phases
-- Task breakdown
-- Testing strategy
-- Timeline estimates
-
 ## 🚀 Quick Navigation
 
 ### For Users
-- **Installation**: See main [INSTALL.md](../INSTALL.md)
-- **Troubleshooting**: Check [INSTALL.md](../INSTALL.md#troubleshooting)
+- **Installation**: See main [README.md](../README.md#installation)
+- **Troubleshooting**: See main [README.md](../README.md#troubleshooting)
 - **Usage Guide**: See main [README.md](../README.md#usage)
 
 ### For Developers
 - **Getting Started**: Read [ARCHITECTURE.md](ARCHITECTURE.md) first
 - **API Details**: See [SPECIFICATION.md](SPECIFICATION.md)
-- **Contributing**: See main [CONTRIBUTING.md](../CONTRIBUTING.md)
+- **Contributing**: See main [README.md](../README.md#contributing)
 
 ### For Maintainers
-- **Deployment**: See [INSTALL.md](../INSTALL.md)
-- **Security**: See main [SECURITY.md](../SECURITY.md)
-- **Updates**: See main [CHANGELOG.md](../CHANGELOG.md)
+- **Deployment**: See main [README.md](../README.md#installation)
+- **Security**: See main [README.md](../README.md#security)
+- **Updates**: See main [README.md](../README.md#changelog)
 
 ## 📖 Documentation Standards
 
@@ -58,10 +51,9 @@ All documentation follows these principles:
 
 | Document | Status | Last Updated |
 |----------|--------|--------------|
-| ARCHITECTURE.md | ✅ Current | 2025-10-12 |
-| SPECIFICATION.md | ✅ Current | 2025-10-12 |
-| IMPLEMENTATION_ROADMAP.md | ✅ Current | 2025-10-12 |
+| ARCHITECTURE.md | ✅ Current | 2025-12-12 |
+| SPECIFICATION.md | ✅ Current | 2025-12-12 |
 
 ---
 
-For the latest updates, see the main [CHANGELOG.md](../CHANGELOG.md).
+For the latest updates, see the main [README.md](../README.md#changelog).

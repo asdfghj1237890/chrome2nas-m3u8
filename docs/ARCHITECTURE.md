@@ -732,8 +732,8 @@ Internet
 │ │                                 │ │
 │ │ Volumes:                        │ │
 │ │ ├─→ /volume1/downloads          │ │
-│ │ ├─→ /volume1/docker/db_data     │ │
-│ │ └─→ /volume1/docker/logs        │ │
+│ │ ├─→ /volume1/docker/m3u8-downloader/db_data     │ │
+│ │ └─→ /volume1/docker/m3u8-downloader/logs        │ │
 │ └─────────────────────────────────┘ │
 └─────────────────────────────────────┘
 
@@ -766,5 +766,5 @@ This architecture provides:
 - ✅ **Performance**: Concurrent downloads, caching, optimizations
 - ✅ **Maintainability**: Clear separation of concerns, documented
 
-For implementation details, see [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md).
+For implementation details, see the root [README.md](../README.md) and [SPECIFICATION.md](SPECIFICATION.md).
 

@@ -390,12 +390,16 @@ The system deploys **2 independent workers** by default, both pulling from the s
 ```bash
 # .env file
 API_KEY=your-secure-api-key-here
-NAS_STORAGE_PATH=/volume1/downloads/m3u8
-DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
-REDIS_URL=redis://redis:6379
+DB_PASSWORD=your-secure-db-password-here
+# Storage is mounted to /downloads inside containers
+STORAGE_PATH=/downloads
 MAX_CONCURRENT_DOWNLOADS=3
+MAX_DOWNLOAD_WORKERS=10
+MAX_RETRY_ATTEMPTS=3
 FFMPEG_THREADS=4
 LOG_LEVEL=INFO
+ALLOWED_ORIGINS=chrome-extension://*
+RATE_LIMIT_PER_MINUTE=10
 ```
 
 ### 7.2 Extension Configuration
@@ -543,40 +547,29 @@ chrome2nas-m3u8/
 ├── chrome-extension/       # Chrome extension
 │   ├── manifest.json
 │   ├── background.js
-│   ├── popup/
-│   │   ├── popup.html
-│   │   ├── popup.js
-│   │   └── popup.css
-│   ├── content/
-│   │   └── detector.js
+│   ├── options/
+│   ├── sidepanel.html
+│   ├── sidepanel.js
+│   ├── sidepanel.css
 │   └── icons/
-├── docker/
-│   ├── docker-compose.yml
-│   ├── api/                # API service
-│   │   ├── Dockerfile
-│   │   ├── requirements.txt
-│   │   ├── main.py
-│   │   └── routers/
-│   └── worker/             # Download worker
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       ├── worker.py
-│       └── downloader.py
+├── m3u8-downloader/
+│   └── docker/
+│       ├── api/                # FastAPI service
+│       ├── worker/             # Download worker
+│       ├── docker-compose.yml
+│       ├── docker-compose.synology.yml
+│       └── SYNOLOGY_DEPLOY_COMMANDS.md
 ├── docs/
-│   ├── INSTALLATION.md
-│   ├── API.md
-│   └── TROUBLESHOOTING.md
-├── tests/
-│   ├── test_api.py
-│   └── test_worker.py
-├── .env.example
+│   ├── ARCHITECTURE.md
+│   ├── SPECIFICATION.md
+│   └── README.md
+├── pics/
 ├── README.md
-└── SPECIFICATION.md        # This document
 ```
 
 ---
 
 **Document Version**: 1.0  
-**Last Updated**: 2025-10-12  
+**Last Updated**: 2025-12-12  
 **Status**: Ready for Implementation
 

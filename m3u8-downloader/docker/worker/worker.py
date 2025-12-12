@@ -9,6 +9,7 @@ import time
 import logging
 import redis
 import json
+import subprocess
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -52,6 +53,37 @@ class DownloadWorker:
     
     def __init__(self):
         self.db = SessionLocal()
+
+    def _probe_duration_seconds(self, file_path: str):
+        """Return media duration in seconds using ffprobe, or None if unavailable."""
+        try:
+            process = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    file_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if process.returncode != 0:
+                return None
+            raw = (process.stdout or "").strip()
+            if not raw:
+                return None
+            seconds = float(raw)
+            if seconds <= 0:
+                return None
+            return int(seconds)
+        except Exception:
+            return None
     
     def update_job_status(self, job_id: str, status: str, progress: int = None, 
                          error_message: str = None, file_path: str = None, 
@@ -291,6 +323,22 @@ class DownloadWorker:
             
             # Get final file size
             file_size = Path(output_file).stat().st_size
+
+            # Save duration (seconds) for MP4 as metadata if possible
+            duration_seconds = self._probe_duration_seconds(output_file)
+            if duration_seconds is not None:
+                self.db.execute(
+                    text(
+                        """
+                        INSERT INTO job_metadata (job_id, duration)
+                        VALUES (:job_id, :duration)
+                        ON CONFLICT (job_id)
+                        DO UPDATE SET duration = EXCLUDED.duration
+                        """
+                    ),
+                    {"job_id": job_id, "duration": duration_seconds},
+                )
+                self.db.commit()
             
             # Mark as completed
             self.update_job_status(

@@ -26,11 +26,16 @@ html, body {
   margin: 0 !important;
   padding: 0 !important;
   height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Ensure consistent CJK + Latin rendering across elements */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-app);
   color: var(--text-main);
   font-size: 13px;
   line-height: 1.5;
+}
+
+button, input, select, textarea {
+  font: inherit;
 }
 
 .sidepanel-wrapper {
@@ -250,7 +255,8 @@ html, body {
 
 .job-title {
   font-size: 13px;
-  font-weight: 500;
+  /* Avoid inconsistent synthetic weights in CJK fallback fonts */
+  font-weight: 400;
   color: var(--text-main);
   overflow: hidden;
   text-overflow: ellipsis;

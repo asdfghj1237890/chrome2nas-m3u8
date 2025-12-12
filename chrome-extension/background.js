@@ -58,7 +58,14 @@ chrome.webRequest.onSendHeaders.addListener(
         for (const header of details.requestHeaders) {
           // Skip some internal headers
           if (!header.name.toLowerCase().startsWith(':')) {
-            headersObj[header.name] = header.value;
+            // Normalize common header casing so later lookups are reliable
+            const nameLower = header.name.toLowerCase();
+            let key = header.name;
+            if (nameLower === 'cookie') key = 'Cookie';
+            if (nameLower === 'referer') key = 'Referer';
+            if (nameLower === 'origin') key = 'Origin';
+            if (nameLower === 'user-agent') key = 'User-Agent';
+            headersObj[key] = header.value;
           }
         }
       }
@@ -164,19 +171,112 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     // Clean up title
     title = title.replace(/[<>:"/\\|?*]/g, '').substring(0, 100);
     
-    // First, try to use captured headers for this exact URL
+    // First, try to use captured headers for this exact URL.
+    // If not found (or if the user clicked an older detected URL), pick the best recent
+    // captured m3u8 request from the active tab. Many players request the *real* m3u8
+    // with expiring tokens or different bitrate paths, so exact matching is often too strict.
     let finalHeaders = {};
-    const captured = capturedHeaders[url];
+    let urlToSend = url;
+
+    function tryGetUrl(u) {
+      try { return new URL(u); } catch (_) { return null; }
+    }
+
+    async function getActiveTabId() {
+      try {
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        return tabs && tabs[0] ? tabs[0].id : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function originOf(u) {
+      const uu = tryGetUrl(u);
+      return uu ? uu.origin : null;
+    }
+
+    function hasCookieHeader(headers) {
+      if (!headers) return false;
+      for (const k of Object.keys(headers)) {
+        if (typeof k === 'string' && k.toLowerCase() === 'cookie') return true;
+      }
+      return false;
+    }
+
+    function findBestCapturedEntry(targetUrl, tabId, sourcePageUrl) {
+      const t = tryGetUrl(targetUrl);
+      if (!t) return null;
+
+      let best = null;
+      const sourceOrigin = originOf(sourcePageUrl);
+
+      for (const [k, entry] of Object.entries(capturedHeaders)) {
+        const ku = tryGetUrl(k);
+        if (!ku || !entry) continue;
+
+        // Only consider m3u8 captures
+        if (!k.toLowerCase().includes('.m3u8')) continue;
+
+        let score = 0;
+        if (tabId != null && entry.tabId === tabId) score += 10;
+        if (ku.origin === t.origin) score += 5;
+        if (ku.pathname === t.pathname) score += 2;
+        // Prefer tokenized URLs (query params) as they often map to full playlists
+        if (ku.search && ku.search.length > 1) score += 3;
+        // Prefer captured requests that already carried Cookie headers
+        if (hasCookieHeader(entry.headers)) score += 3;
+        if (sourceOrigin && entry.initiator && entry.initiator.startsWith(sourceOrigin)) score += 3;
+        if (entry.timestamp && (Date.now() - entry.timestamp) < 60_000) score += 1;
+
+        if (!best) {
+          best = { url: k, entry, score };
+          continue;
+        }
+
+        if (score > best.score) {
+          best = { url: k, entry, score };
+          continue;
+        }
+
+        if (score === best.score && (entry.timestamp || 0) > (best.entry.timestamp || 0)) {
+          best = { url: k, entry, score };
+        }
+      }
+      return best;
+    }
+
+    const tabId = await getActiveTabId();
+    let captured = capturedHeaders[url];
+    const best = findBestCapturedEntry(url, tabId, pageUrl);
+
+    // Use the best captured m3u8 when it's a strong match for this tab+origin,
+    // even if we have an exact key hit. Exact matches are often "clean" URLs
+    // (no token) while the real player request contains query params.
+    const shouldUseBest =
+      !!best &&
+      (captured == null || best.score >= 15 || (best.entry && best.entry.timestamp && captured.timestamp && best.entry.timestamp > captured.timestamp));
+
+    if (shouldUseBest) {
+      captured = best.entry;
+      urlToSend = best.url;
+      console.log('Using best captured m3u8 for this tab:', urlToSend);
+    }
     
     if (captured && captured.headers) {
-      console.log('Using captured browser headers for:', url);
+      console.log('Using captured browser headers for:', urlToSend);
       finalHeaders = { ...captured.headers };
       
       // Remove headers that shouldn't be forwarded
+      // (Handle common case variants because captured headers aren't guaranteed casing)
       delete finalHeaders['Host'];
+      delete finalHeaders['host'];
       delete finalHeaders['Connection'];
+      delete finalHeaders['connection'];
       delete finalHeaders['Content-Length'];
+      delete finalHeaders['content-length'];
       delete finalHeaders['Accept-Encoding']; // Let the worker handle compression
+      delete finalHeaders['accept-encoding'];
     }
     
     // Also get cookies for the source page domain (fallback)
@@ -198,10 +298,34 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     
     // Also get cookies for the m3u8 URL domain
     try {
-      const m3u8UrlObj = new URL(url);
-      const m3u8Cookies = await chrome.cookies.getAll({ url: url });
+      const m3u8UrlObj = new URL(urlToSend);
+      const topLevelSite = (() => {
+        try {
+          return new URL(pageUrl).origin;
+        } catch (_) {
+          return null;
+        }
+      })();
+
+      // Note: Some sites use partitioned cookies (CHIPS). In that case, getAll({url})
+      // can return 0 even though Chrome will send cookies during playback.
+      let m3u8Cookies = await chrome.cookies.getAll({ url: urlToSend });
+      if (m3u8Cookies.length === 0 && topLevelSite) {
+        try {
+          const partitioned = await chrome.cookies.getAll({
+            url: urlToSend,
+            partitionKey: { topLevelSite }
+          });
+          if (partitioned && partitioned.length > 0) {
+            m3u8Cookies = partitioned;
+            console.log('Found partitioned cookies for m3u8 domain');
+          }
+        } catch (e) {
+          console.warn('Failed to get partitioned cookies:', e);
+        }
+      }
       
-      console.log(`Getting cookies for m3u8 URL: ${url}`);
+      console.log(`Getting cookies for m3u8 URL: ${urlToSend}`);
       console.log(`Found ${m3u8Cookies.length} cookies for m3u8 domain`);
       
       if (m3u8Cookies.length > 0) {
@@ -223,7 +347,7 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     
     // Prepare request body
     const requestBody = {
-      url: url,
+      url: urlToSend,
       title: title,
       source_page: pageUrl,
       referer: pageUrl,

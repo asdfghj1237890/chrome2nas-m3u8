@@ -374,25 +374,63 @@ class DownloadWorker:
             # Step 1: Parse m3u8 playlist (5%)
             logger.info("Step 1: Parsing m3u8 playlist")
             headers = job.get('headers', {}).copy()
+
+            # Normalize a few critical header names (case-insensitive) so we don't
+            # miss cookies/origin/referer due to casing differences from Chrome capture.
+            def _get_header_ci(d: dict, name: str):
+                target = name.lower()
+                for k, v in d.items():
+                    if isinstance(k, str) and k.lower() == target:
+                        return v
+                return None
+
+            def _pop_header_ci(d: dict, name: str):
+                target = name.lower()
+                to_delete = [k for k in d.keys() if isinstance(k, str) and k.lower() == target]
+                val = None
+                for k in to_delete:
+                    if val is None:
+                        val = d.get(k)
+                    d.pop(k, None)
+                return val
+
+            cookie_val = _get_header_ci(headers, "Cookie")
+            if cookie_val is not None:
+                _pop_header_ci(headers, "Cookie")
+                headers["Cookie"] = cookie_val
+
+            origin_val = _get_header_ci(headers, "Origin")
+            if origin_val is not None:
+                _pop_header_ci(headers, "Origin")
+                headers["Origin"] = origin_val
+
+            referer_val = _get_header_ci(headers, "Referer")
+            if referer_val is not None:
+                _pop_header_ci(headers, "Referer")
+                headers["Referer"] = referer_val
             
             # Remove headers that could cause issues with fresh downloads
             # Range header from browser capture would cause partial downloads
-            headers.pop('Range', None)
-            headers.pop('range', None)
+            _pop_header_ci(headers, "Range")
             # Sec-Fetch-Dest=video is specific to video element requests
             if headers.get('Sec-Fetch-Dest') == 'video':
                 headers['Sec-Fetch-Dest'] = 'empty'
             
             # Add critical headers for CORS and authentication
-            if job.get('referer'):
+            # Only set Referer if one wasn't provided (case-insensitive).
+            # If the extension captured a working Referer for the m3u8 domain,
+            # we must not overwrite it with the source page URL.
+            if job.get('referer') and _get_header_ci(headers, "Referer") is None:
                 headers['Referer'] = job['referer']
             
             # Add Origin header from source_page for CORS
             if job.get('source_page'):
                 parsed = urlparse(job['source_page'])
                 origin = f"{parsed.scheme}://{parsed.netloc}"
-                headers['Origin'] = origin
-                logger.info(f"Added Origin header: {origin}")
+                # Only set Origin if one wasn't provided (case-insensitive).
+                if _get_header_ci(headers, "Origin") is None:
+                    headers['Origin'] = origin
+                    logger.info(f"Added Origin header: {origin}")
             
             # Add User-Agent to mimic browser
             if 'User-Agent' not in headers:
@@ -414,8 +452,9 @@ class DownloadWorker:
             
             # Debug: Log headers to verify
             logger.info(f"Request headers: {headers}")
-            if 'Cookie' in headers:
-                logger.info(f"Cookie present: {headers['Cookie'][:100]}...")
+            cookie_preview = _get_header_ci(headers, "Cookie")
+            if cookie_preview:
+                logger.info(f"Cookie present: {str(cookie_preview)[:100]}...")
             else:
                 logger.warning("No Cookie in headers!")
             

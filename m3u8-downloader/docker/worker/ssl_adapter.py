@@ -30,6 +30,29 @@ LEGACY_CIPHERS = (
     'DEFAULT:!aNULL:!eNULL:!MD5:@SECLEVEL=1'
 )
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    raw = raw.strip().lower()
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
+def tls_verify_enabled() -> bool:
+    """
+    Control TLS verification defaults.
+
+    Default: verify enabled (secure).
+    To disable verification (insecure), set either:
+      - INSECURE_SKIP_TLS_VERIFY=1
+      - SSL_VERIFY=0
+    """
+    if _env_flag("INSECURE_SKIP_TLS_VERIFY", False):
+        return False
+    if os.getenv("SSL_VERIFY") is not None:
+        return _env_flag("SSL_VERIFY", True)
+    return True
+
 
 class LegacySSLAdapter(HTTPAdapter):
     """
@@ -39,8 +62,15 @@ class LegacySSLAdapter(HTTPAdapter):
     
     def init_poolmanager(self, *args, **kwargs):
         ctx = create_urllib3_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        verify = tls_verify_enabled()
+        ctx.check_hostname = verify
+        ctx.verify_mode = ssl.CERT_REQUIRED if verify else ssl.CERT_NONE
+        if verify:
+            # Best-effort: ensure default CAs are available with custom context.
+            try:
+                ctx.load_default_certs()
+            except Exception:
+                pass
         ctx.set_ciphers(LEGACY_CIPHERS)
         # Enable legacy renegotiation for older servers (Python 3.12+)
         if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
@@ -73,9 +103,9 @@ class BrowserSession:
     
     def _prepare_kwargs(self, kwargs):
         """Prepare request kwargs with defaults"""
-        # Disable SSL verification by default
+        # TLS verification is secure-by-default; opt-out via env (see tls_verify_enabled()).
         if 'verify' not in kwargs:
-            kwargs['verify'] = False
+            kwargs['verify'] = tls_verify_enabled()
         # Force HTTP/1.1 to avoid issues with servers that send invalid HTTP/2 headers
         # Some CDNs return 'keep-alive' header which is invalid in HTTP/2
         from curl_cffi.const import CurlHttpVersion

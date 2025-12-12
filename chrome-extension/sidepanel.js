@@ -118,7 +118,7 @@ function renderDetectedUrls() {
     return `
     <div class="url-item">
       <div class="url-title">${videoType} #${index + 1}</div>
-      <div class="url-link" title="${urlInfo.url}">${truncateUrl(urlInfo.url)}</div>
+      <div class="url-link" title="${escapeHtml(urlInfo.url)}">${escapeHtml(truncateUrl(urlInfo.url))}</div>
       ${hasIp ? `
         <div class="ip-warning">
           <strong>IP-Restricted URL Detected</strong><br>

@@ -54,6 +54,17 @@ chrome.webRequest.onSendHeaders.addListener(
     if (urlLower.includes('.m3u8') || urlLower.includes('.mp4')) {
       // Convert headers array to object
       const headersObj = {};
+      const SINGLETON_HEADERS = new Set(['User-Agent', 'Referer', 'Origin']);
+
+      function mergeHeaderValue(existing, incoming, joiner) {
+        const a = (existing ?? '').toString().trim();
+        const b = (incoming ?? '').toString().trim();
+        if (!a) return b;
+        if (!b) return a;
+        if (a === b) return a;
+        return `${a}${joiner}${b}`;
+      }
+
       if (details.requestHeaders) {
         for (const header of details.requestHeaders) {
           // Skip some internal headers
@@ -65,7 +76,16 @@ chrome.webRequest.onSendHeaders.addListener(
             if (nameLower === 'referer') key = 'Referer';
             if (nameLower === 'origin') key = 'Origin';
             if (nameLower === 'user-agent') key = 'User-Agent';
-            headersObj[key] = header.value;
+
+            // Avoid data loss if Chrome ever sends duplicated headers with different casing.
+            // Merge where it is safe/expected; otherwise keep the first seen value.
+            if (headersObj[key] === undefined) {
+              headersObj[key] = header.value;
+            } else if (key === 'Cookie') {
+              headersObj[key] = mergeHeaderValue(headersObj[key], header.value, '; ');
+            } else if (!SINGLETON_HEADERS.has(key)) {
+              headersObj[key] = mergeHeaderValue(headersObj[key], header.value, ', ');
+            }
           }
         }
       }

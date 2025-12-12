@@ -10,6 +10,7 @@ import logging
 import redis
 import json
 import subprocess
+import shutil
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -57,9 +58,12 @@ class DownloadWorker:
     def _probe_duration_seconds(self, file_path: str):
         """Return media duration in seconds using ffprobe, or None if unavailable."""
         try:
+            ffprobe_path = shutil.which("ffprobe")
+            if not ffprobe_path:
+                return None
             process = subprocess.run(
                 [
-                    "ffprobe",
+                    ffprobe_path,
                     "-v",
                     "error",
                     "-show_entries",
@@ -384,6 +388,14 @@ class DownloadWorker:
                         return v
                 return None
 
+            def _get_headers_ci(d: dict, name: str):
+                target = name.lower()
+                values = []
+                for k, v in d.items():
+                    if isinstance(k, str) and k.lower() == target and v is not None:
+                        values.append(v)
+                return values
+
             def _pop_header_ci(d: dict, name: str):
                 target = name.lower()
                 to_delete = [k for k in d.keys() if isinstance(k, str) and k.lower() == target]
@@ -394,10 +406,12 @@ class DownloadWorker:
                     d.pop(k, None)
                 return val
 
-            cookie_val = _get_header_ci(headers, "Cookie")
-            if cookie_val is not None:
+            cookie_vals = _get_headers_ci(headers, "Cookie")
+            if cookie_vals:
                 _pop_header_ci(headers, "Cookie")
-                headers["Cookie"] = cookie_val
+                merged_cookie = "; ".join(str(v).strip() for v in cookie_vals if str(v).strip())
+                if merged_cookie:
+                    headers["Cookie"] = merged_cookie
 
             origin_val = _get_header_ci(headers, "Origin")
             if origin_val is not None:

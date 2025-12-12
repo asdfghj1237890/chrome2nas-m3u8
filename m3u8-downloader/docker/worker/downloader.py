@@ -14,9 +14,10 @@ from urllib.parse import urlparse
 import urllib3
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
-from ssl_adapter import create_legacy_session, create_impersonated_session
+from ssl_adapter import create_legacy_session, create_impersonated_session, tls_verify_enabled
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+if not tls_verify_enabled():
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 

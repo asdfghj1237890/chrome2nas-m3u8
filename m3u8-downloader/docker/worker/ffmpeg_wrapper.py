@@ -27,6 +27,7 @@ class FFmpegMerger:
         self.output_file = output_file
         self.threads = threads
         self.concat_dir = concat_dir or str(Path(output_file).parent)
+        self.ffmpeg_path: Optional[str] = None
         
         # Verify FFmpeg is available
         if not self._check_ffmpeg():
@@ -34,7 +35,8 @@ class FFmpegMerger:
     
     def _check_ffmpeg(self) -> bool:
         """Check if FFmpeg is available"""
-        return shutil.which('ffmpeg') is not None
+        self.ffmpeg_path = shutil.which('ffmpeg')
+        return self.ffmpeg_path is not None
     
     def _create_concat_file(self, concat_file_path: str):
         """Create concat demuxer file for FFmpeg"""
@@ -68,7 +70,7 @@ class FFmpegMerger:
             
             # FFmpeg command: use concat demuxer with copy codec (fast, no re-encoding)
             command = [
-                'ffmpeg',
+                self.ffmpeg_path or 'ffmpeg',
                 '-f', 'concat',           # Use concat demuxer
                 '-safe', '0',             # Allow absolute paths
                 '-i', str(concat_file),   # Input concat file
@@ -133,7 +135,7 @@ class FFmpegMerger:
             
             # Re-encode with H.264 and AAC
             command = [
-                'ffmpeg',
+                self.ffmpeg_path or 'ffmpeg',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', str(concat_file),

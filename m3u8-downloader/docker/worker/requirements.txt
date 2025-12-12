@@ -6,12 +6,12 @@ psycopg2-binary==2.9.9
 redis==5.0.1
 
 # HTTP client
-requests==2.31.0
-aiohttp==3.9.1
+requests==2.32.4
+aiohttp==3.12.14
 aiofiles==23.2.1
 
 # Brotli decompression support for requests
-brotli==1.1.0
+brotli==1.2.0
 
 # Browser-like HTTP client with TLS fingerprint impersonation
 # This bypasses TLS fingerprinting (JA3) anti-bot detection

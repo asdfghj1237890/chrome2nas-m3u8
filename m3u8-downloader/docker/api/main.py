@@ -20,8 +20,15 @@ import uuid
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/m3u8_db")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-API_KEY = os.getenv("API_KEY", "change-this-key")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+API_KEY = os.getenv("API_KEY")
+
+# Backward-compatible default: allow all origins unless explicitly restricted.
+_allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*").strip()
+ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins_raw.split(",") if o.strip()] if _allowed_origins_raw else ["*"]
+ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "false").strip().lower() in ("1", "true", "yes", "y", "on")
+if ALLOWED_ORIGINS == ["*"]:
+    # Wildcard with credentials is not allowed by browsers and is unsafe.
+    ALLOW_CREDENTIALS = False
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Setup logging
@@ -39,7 +46,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -97,6 +104,8 @@ def get_db():
 
 def verify_api_key(authorization: Optional[str] = Header(None)):
     """Verify API key from Authorization header"""
+    if not API_KEY or API_KEY.strip() == "" or API_KEY.strip() == "change-this-key":
+        raise HTTPException(status_code=503, detail="Server not configured: API_KEY is not set")
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     

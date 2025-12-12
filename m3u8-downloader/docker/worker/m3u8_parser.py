@@ -8,9 +8,10 @@ from urllib.parse import urljoin, urlparse
 from typing import List, Dict, Optional
 import m3u8
 import urllib3
-from ssl_adapter import create_legacy_session
+from ssl_adapter import create_legacy_session, tls_verify_enabled
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+if not tls_verify_enabled():
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 

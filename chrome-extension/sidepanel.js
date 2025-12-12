@@ -265,11 +265,14 @@ function getJobInnerHtml(job) {
   const showProgress = job.status === 'downloading' || job.status === 'processing';
   const isFailed = job.status === 'failed';
   const errorInfo = isFailed ? getErrorInfo(job.error_message) : null;
+  const statusTooltip = (job.status === 'completed' && typeof job.duration === 'number')
+    ? `Duration: ${formatDuration(job.duration)}`
+    : '';
 
   return `
     <div class="job-header">
       <div class="job-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</div>
-      <div class="job-status ${job.status}">${getStatusLabel(job.status)}</div>
+      <div class="job-status ${job.status}" ${statusTooltip ? `title="${escapeHtml(statusTooltip)}"` : ''}>${getStatusLabel(job.status)}</div>
     </div>
     ${showProgress || canCancel ? `
       <div class="job-progress">
@@ -338,6 +341,14 @@ function updateJobElement(el, job) {
   if (statusEl) {
     statusEl.className = `job-status ${job.status}`;
     statusEl.textContent = getStatusLabel(job.status);
+    const statusTooltip = (job.status === 'completed' && typeof job.duration === 'number')
+      ? `Duration: ${formatDuration(job.duration)}`
+      : '';
+    if (statusTooltip) {
+      statusEl.setAttribute('title', statusTooltip);
+    } else {
+      statusEl.removeAttribute('title');
+    }
   }
   
   // Update progress bar
@@ -591,6 +602,20 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function formatDuration(totalSeconds) {
+  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const seconds = s % 60;
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  if (hours > 0) {
+    const hh = String(hours).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  }
+  return `${mm}:${ss}`;
 }
 
 // Check if URL contains an IP address

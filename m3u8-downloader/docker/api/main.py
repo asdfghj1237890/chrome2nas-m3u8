@@ -75,6 +75,7 @@ class JobResponse(BaseModel):
     status: str
     progress: int
     created_at: str
+    duration: Optional[int] = None
     file_size: Optional[int] = None
     file_path: Optional[str] = None
     error_message: Optional[str] = None
@@ -197,14 +198,20 @@ async def list_jobs(
 ):
     """List all jobs with optional status filter"""
     try:
-        query = "SELECT id, url, title, status, progress, created_at, file_size, file_path, error_message FROM jobs"
+        query = """
+            SELECT j.id, j.url, j.title, j.status, j.progress, j.created_at,
+                   jm.duration,
+                   j.file_size, j.file_path, j.error_message
+            FROM jobs j
+            LEFT JOIN job_metadata jm ON j.id = jm.job_id
+        """
         params = {}
         
         if status:
-            query += " WHERE status = :status"
+            query += " WHERE j.status = :status"
             params["status"] = status
         
-        query += " ORDER BY created_at DESC LIMIT :limit"
+        query += " ORDER BY j.created_at DESC LIMIT :limit"
         params["limit"] = limit
         
         result = db.execute(text(query), params)
@@ -218,6 +225,7 @@ async def list_jobs(
                 status=row.status,
                 progress=row.progress,
                 created_at=row.created_at.isoformat(),
+                duration=row.duration,
                 file_size=row.file_size,
                 file_path=row.file_path,
                 error_message=row.error_message
@@ -238,8 +246,12 @@ async def get_job(
     """Get details of a specific job"""
     try:
         result = db.execute(text("""
-            SELECT id, url, title, status, progress, created_at, file_size, file_path, error_message
-            FROM jobs WHERE id = :job_id
+            SELECT j.id, j.url, j.title, j.status, j.progress, j.created_at,
+                   jm.duration,
+                   j.file_size, j.file_path, j.error_message
+            FROM jobs j
+            LEFT JOIN job_metadata jm ON j.id = jm.job_id
+            WHERE j.id = :job_id
         """), {"job_id": job_id})
         
         row = result.first()
@@ -253,6 +265,7 @@ async def get_job(
             status=row.status,
             progress=row.progress,
             created_at=row.created_at.isoformat(),
+            duration=row.duration,
             file_size=row.file_size,
             file_path=row.file_path,
             error_message=row.error_message

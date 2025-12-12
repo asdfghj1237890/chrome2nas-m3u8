@@ -364,6 +364,7 @@ class DownloadWorker:
         from m3u8_parser import parse_m3u8
         from downloader import SegmentDownloader
         from ffmpeg_wrapper import merge_segments
+        from ssl_adapter import create_impersonated_session
         import tempfile
         import shutil
         from pathlib import Path
@@ -471,8 +472,12 @@ class DownloadWorker:
                 logger.info(f"Cookie present: {str(cookie_preview)[:100]}...")
             else:
                 logger.warning("No Cookie in headers!")
-            
-            playlist_info = parse_m3u8(job['url'], headers)
+
+            # Use a single impersonated session for playlist+key+segments to preserve
+            # cookies and browser-like TLS fingerprint. Some sites gate the "full"
+            # playlist and segments behind this continuity.
+            shared_session = create_impersonated_session()
+            playlist_info = parse_m3u8(job['url'], headers, session=shared_session)
             self.update_job_status(job_id, "downloading", progress=5)
             
             # Update metadata
@@ -511,9 +516,11 @@ class DownloadWorker:
                 output_dir=temp_dir,
                 headers=segment_headers,
                 max_workers=int(os.getenv('MAX_DOWNLOAD_WORKERS', 2)),
-                encryption_key=playlist_info.get('encryption_key'),
-                encryption_iv=playlist_info.get('encryption_iv'),
-                m3u8_url=job['url']  # Pass m3u8 URL for Referer strategies
+                # Per-segment keys/IVs are included in segment metadata now.
+                encryption_key=None,
+                encryption_iv=None,
+                m3u8_url=job['url'],  # Pass m3u8 URL for Referer strategies
+                session=shared_session,
             )
             
             def progress_callback(completed, total):

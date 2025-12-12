@@ -29,6 +29,8 @@ TS_PACKET_SIZE = 188
 JPEG_MAGIC = b'\xff\xd8\xff'
 PNG_MAGIC = b'\x89PNG'
 GIF_MAGIC = b'GIF8'
+MP4_FTYP_AT_4 = b'ftyp'
+MP4_STYP_AT_4 = b'styp'
 
 
 class SegmentDownloader:
@@ -56,6 +58,10 @@ class SegmentDownloader:
         self.encryption_key = encryption_key
         self.encryption_iv = encryption_iv
         self.m3u8_url = m3u8_url
+
+        # Cache for rotating AES-128 keys (key URI -> bytes)
+        self._key_cache = {}
+        self._key_cache_lock = threading.Lock()
         
         self.downloaded_count = 0
         self.total_segments = len(segments)
@@ -121,6 +127,39 @@ class SegmentDownloader:
             return True, ""
         
         return False, "Invalid TS format (no sync bytes found)"
+
+    def _is_obviously_blocked_response(self, data: bytes, content_type: str = "") -> tuple[bool, str]:
+        """
+        Detect common non-media responses (HTML/JSON/images) before any decryption.
+        This prevents turning block pages into random bytes via AES decrypt and then
+        mistakenly accepting them.
+        """
+        if not data:
+            return True, "Empty response"
+
+        ct = (content_type or "").lower()
+        if "text/html" in ct:
+            return True, "Server returned text/html (likely blocked)"
+        if "application/json" in ct:
+            return True, "Server returned application/json (likely error)"
+
+        # Images (anti-hotlinking placeholders)
+        if data[:3] == JPEG_MAGIC:
+            return True, "Server returned JPEG image (anti-hotlinking protection)"
+        if data[:4] == PNG_MAGIC:
+            return True, "Server returned PNG image (anti-hotlinking protection)"
+        if data[:4] == GIF_MAGIC:
+            return True, "Server returned GIF image (anti-hotlinking protection)"
+
+        # HTML/XML
+        if data[:5].lower() in (b'<!doc', b'<html', b'<?xml'):
+            return True, "Server returned HTML/XML error page"
+
+        lower_start = data[:1000].lower()
+        if b'forbidden' in lower_start or b'access denied' in lower_start or b'denied' in lower_start:
+            return True, "Server returned access denied response"
+
+        return False, ""
     
     def _decrypt_segment(self, data: bytes, segment_index: int) -> bytes:
         """Decrypt AES-128 encrypted segment"""
@@ -195,6 +234,101 @@ class SegmentDownloader:
         except Exception as e:
             logger.warning(f"Decryption failed for segment {segment_index}: {e}")
             return data  # Return original data if decryption fails
+
+    def _get_key_bytes(self, key_url: str) -> bytes:
+        """Fetch AES-128 key bytes with caching (thread-safe)."""
+        with self._key_cache_lock:
+            cached = self._key_cache.get(key_url)
+        if cached is not None:
+            return cached
+
+        response = self.session.get(
+            key_url,
+            headers=self.headers,
+            timeout=self.timeout,
+            stream=False,
+        )
+        response.raise_for_status()
+        key = response.content or b""
+        if len(key) != 16:
+            raise ValueError(f"Unexpected AES-128 key length: {len(key)} bytes (expected 16)")
+
+        with self._key_cache_lock:
+            self._key_cache[key_url] = key
+        return key
+
+    def _decrypt_segment_with_key(
+        self,
+        data: bytes,
+        segment_index: int,
+        key_bytes: bytes,
+        iv_bytes: Optional[bytes],
+        sequence_number: Optional[int],
+    ) -> bytes:
+        """Decrypt AES-128 encrypted segment with per-segment key/iv metadata."""
+        if not key_bytes:
+            return data
+
+        if segment_index == 0:
+            logger.info(f"Encryption key (first 4 bytes): {key_bytes[:4].hex()}")
+            if iv_bytes is not None:
+                logger.info(f"Using provided IV: {iv_bytes.hex()}")
+            else:
+                logger.info("No IV provided, will use segment sequence/index")
+
+        # If it's already valid TS, skip decryption entirely.
+        is_ts, _ = self._is_valid_ts_content(data)
+        if is_ts:
+            if segment_index == 0:
+                logger.info("Segment 0: Data already appears to be valid TS, skipping decryption")
+            return data
+
+        # AES-128-CBC requires input to be a multiple of 16 bytes
+        if len(data) % 16 != 0:
+            padding_needed = 16 - (len(data) % 16)
+            padded_data = data + bytes(padding_needed)
+        else:
+            padded_data = data
+
+        try:
+            iv_strategies = []
+
+            if iv_bytes is not None:
+                iv_strategies.append(("provided IV", iv_bytes))
+
+            # HLS default IV is the media sequence number (big-endian 128-bit)
+            if sequence_number is not None:
+                iv_strategies.append(("sequence IV", int(sequence_number).to_bytes(16, byteorder="big")))
+
+            # Fallback: segment index
+            iv_strategies.append(("segment index IV", int(segment_index).to_bytes(16, byteorder="big")))
+
+            # Fallback: zeros
+            iv_strategies.append(("zeros IV", bytes(16)))
+
+            last = None
+            for strategy_name, iv in iv_strategies:
+                cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+                decrypted = cipher.decrypt(padded_data)
+                last = decrypted
+                try:
+                    decrypted = unpad(decrypted, AES.block_size)
+                except ValueError:
+                    pass
+
+                if decrypted[:1] == TS_SYNC_BYTE:
+                    if segment_index < 3:
+                        logger.info(f"Segment {segment_index}: Decryption successful with {strategy_name}")
+                    return decrypted
+
+            logger.warning(
+                f"Segment {segment_index}: All decryption strategies failed "
+                f"(first byte after zeros IV: {hex(last[0]) if last else 'empty'})"
+            )
+            return last or data
+        except Exception as e:
+            logger.warning(f"Decryption failed for segment {segment_index}: {e}")
+            return data
     
     def _get_referer_strategies(self, segment_url: str) -> List[Dict[str, str]]:
         """
@@ -263,6 +397,16 @@ class SegmentDownloader:
             
             response.raise_for_status()
             content = response.content
+
+            # Early content-type based blocking detection
+            content_type = ""
+            try:
+                content_type = response.headers.get("Content-Type", "")
+            except Exception:
+                content_type = ""
+            blocked, _reason = self._is_obviously_blocked_response(content, content_type=content_type)
+            if blocked:
+                return None
             
             if len(content) < 188:
                 return None
@@ -382,12 +526,40 @@ class SegmentDownloader:
                 
                 response.raise_for_status()
                 content = response.content
+
+                content_type = ""
+                try:
+                    content_type = response.headers.get("Content-Type", "")
+                except Exception:
+                    content_type = ""
+                blocked, reason = self._is_obviously_blocked_response(content, content_type=content_type)
+                if blocked:
+                    raise ValueError(reason)
                 
                 if len(content) < 188:
                     raise ValueError(f"Segment too small: {len(content)} bytes")
+
+            # Always check for obvious block/HTML responses BEFORE decryption.
+            # If we decrypt first, block pages become random bytes and may slip through.
+            blocked, reason = self._is_obviously_blocked_response(content)
+            if blocked:
+                raise ValueError(reason)
             
-            # Decrypt if encryption key is set
-            if self.encryption_key:
+            # Decrypt (supports per-segment rotating keys via segment['key'])
+            segment_key = segment.get("key") if isinstance(segment, dict) else None
+            if segment_key and isinstance(segment_key, dict) and segment_key.get("method") == "AES-128":
+                key_url = segment_key.get("uri")
+                if not key_url:
+                    raise ValueError("Encrypted segment missing key URI")
+                key_bytes = self._get_key_bytes(key_url)
+                content = self._decrypt_segment_with_key(
+                    content,
+                    index,
+                    key_bytes=key_bytes,
+                    iv_bytes=segment_key.get("iv"),
+                    sequence_number=segment.get("sequence"),
+                )
+            elif self.encryption_key:
                 content = self._decrypt_segment(content, index)
             
             # Validate content is actually a TS file (not an error page)
@@ -395,9 +567,13 @@ class SegmentDownloader:
             if not is_valid:
                 skip_validation = os.environ.get('SKIP_TS_VALIDATION', 'false').lower() == 'true'
                 
-                # Always skip validation for encrypted streams where decryption produced non-image data
-                if self.encryption_key and not content[:3] in (JPEG_MAGIC, PNG_MAGIC[:3], GIF_MAGIC[:3]):
-                    logger.warning(f"Segment {index}: {error_reason} - saving anyway for ffmpeg to process")
+                # For encrypted streams, do NOT blindly save invalid decrypted bytes.
+                # This usually indicates the key/iv is wrong or the server served a block page.
+                if (self.encryption_key or (segment_key and isinstance(segment_key, dict) and segment_key.get("method") == "AES-128")) and not skip_validation:
+                    preview = content[:200]
+                    logger.error(f"Segment {index}: {error_reason}")
+                    logger.error(f"Content preview (first 200 bytes): {preview}")
+                    raise ValueError(error_reason)
                 elif skip_validation:
                     logger.warning(f"Segment {index}: {error_reason} - validation skipped")
                 else:

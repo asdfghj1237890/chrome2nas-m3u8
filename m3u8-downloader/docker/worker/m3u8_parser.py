@@ -27,11 +27,12 @@ except ImportError:
 class M3U8Parser:
     """Parse m3u8 playlists and extract segment URLs"""
     
-    def __init__(self, url: str, headers: Optional[Dict] = None):
+    def __init__(self, url: str, headers: Optional[Dict] = None, session=None):
         self.url = url
         self.headers = self._sanitize_headers(headers or {})
         self.base_url = self._get_base_url(url)
-        self.session = create_legacy_session()
+        # Use provided session to preserve cookies / TLS fingerprint across playlist+key+segments.
+        self.session = session if session is not None else create_legacy_session()
     
     def _sanitize_headers(self, headers: Dict) -> Dict:
         """
@@ -70,13 +71,14 @@ class M3U8Parser:
         try:
             logger.info(f"Fetching playlist: {self.url}")
             
-            # Use streaming to avoid downloading large non-m3u8 files
+            # NOTE: Use non-streaming reads for compatibility across session backends
+            # (requests vs curl_cffi BrowserSession). m3u8 playlists should be small.
             response = self.session.get(
-                self.url, 
+                self.url,
                 headers=self.headers,
                 timeout=30,
                 allow_redirects=True,
-                stream=True
+                stream=False,
             )
             response.raise_for_status()
             
@@ -97,8 +99,12 @@ class M3U8Parser:
                     logger.warning(f"Response is {size_mb:.1f}MB - likely not an m3u8 playlist")
                     raise ValueError(f"Response too large ({size_mb:.1f}MB) - this appears to be a video file, not an m3u8 playlist")
             
+            raw = response.content or b""
+            if not raw:
+                raise ValueError("Empty response - not a valid m3u8 playlist")
+
             # Read first chunk to validate content
-            first_chunk = next(response.iter_content(chunk_size=8192), b'')
+            first_chunk = raw[:8192]
             
             # Check if content is binary (not text)
             try:
@@ -121,20 +127,12 @@ class M3U8Parser:
                 preview = first_text[:200] if len(first_text) > 200 else first_text
                 logger.warning(f"Content doesn't start with #EXTM3U: {preview}")
             
-            # Read the rest of the content (with reasonable limit)
+            # Decode full content (with reasonable limit)
             max_size = 10 * 1024 * 1024  # 10MB max for m3u8
-            content_parts = [first_chunk]
-            total_size = len(first_chunk)
-            
-            for chunk in response.iter_content(chunk_size=65536):
-                if chunk:
-                    content_parts.append(chunk)
-                    total_size += len(chunk)
-                    if total_size > max_size:
-                        raise ValueError(f"Response exceeds {max_size // 1024 // 1024}MB limit - not a valid m3u8 playlist")
-            
-            content = b''.join(content_parts).decode('utf-8')
-            return content
+            if len(raw) > max_size:
+                raise ValueError(f"Response exceeds {max_size // 1024 // 1024}MB limit - not a valid m3u8 playlist")
+
+            return raw.decode("utf-8")
             
         except Exception as e:
             logger.error(f"Failed to fetch playlist: {e}")
@@ -201,7 +199,7 @@ class M3U8Parser:
         variant_url = urljoin(self.url, best_variant.uri)
         
         # Parse the selected variant (media playlist)
-        variant_parser = M3U8Parser(variant_url, self.headers)
+        variant_parser = M3U8Parser(variant_url, self.headers, session=self.session)
         variant_content = variant_parser.fetch_playlist()
         variant_playlist = m3u8.loads(variant_content, uri=variant_url)
         
@@ -215,15 +213,40 @@ class M3U8Parser:
         """Parse media playlist and extract segment URLs"""
         segments = []
         total_duration = 0.0
+
+        media_sequence = getattr(playlist, "media_sequence", 0) or 0
         
         for segment in playlist.segments:
             # Get absolute URL for segment
             segment_url = urljoin(playlist.base_uri or self.url, segment.uri)
+
+            # Capture per-segment encryption metadata (keys can rotate within a playlist)
+            key_info = None
+            if segment.key and segment.key.method == "AES-128" and segment.key.uri:
+                key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
+
+                iv = None
+                if segment.key.iv:
+                    iv_str = segment.key.iv
+                    if isinstance(iv_str, str):
+                        if iv_str.startswith("0x") or iv_str.startswith("0X"):
+                            iv = bytes.fromhex(iv_str[2:])
+                        else:
+                            iv = bytes.fromhex(iv_str)
+
+                key_info = {
+                    "method": "AES-128",
+                    "uri": key_url,
+                    "iv": iv,
+                }
             
             segments.append({
                 'url': segment_url,
                 'duration': segment.duration,
-                'index': len(segments)
+                'index': len(segments),
+                # HLS sequence number is used for default IV when EXT-X-KEY has no IV
+                'sequence': media_sequence + len(segments),
+                'key': key_info,
             })
             
             total_duration += segment.duration
@@ -250,29 +273,20 @@ class M3U8Parser:
             'segment_count': len(segments),
             'is_variant': False,
             'has_encryption': has_encryption,
-            'encryption_key': encryption_info.get('key') if encryption_info else None,
+            'encryption_key_uri': encryption_info.get('key_uri') if encryption_info else None,
             'encryption_iv': encryption_info.get('iv') if encryption_info else None,
             'base_url': playlist.base_uri or self.url
         }
     
     def _get_encryption_info(self, playlist: m3u8.M3U8) -> Optional[Dict]:
-        """Get encryption key and IV if playlist is encrypted"""
+        """Get encryption key URI and IV if playlist is encrypted (per-segment keys may rotate)"""
         for segment in playlist.segments:
             if segment.key and segment.key.method == 'AES-128':
                 try:
+                    if not segment.key.uri:
+                        return None
                     key_url = urljoin(playlist.base_uri or self.url, segment.key.uri)
-                    logger.info(f"Fetching encryption key: {key_url}")
-                    response = self.session.get(key_url, headers=self.headers, timeout=30)
-                    response.raise_for_status()
-                    key = response.content
-                    
-                    # Validate key length (AES-128 requires 16 bytes)
-                    logger.info(f"Encryption key length: {len(key)} bytes")
-                    if len(key) != 16:
-                        logger.warning(f"Unexpected key length: {len(key)} bytes (expected 16)")
-                        # Some servers return key with extra whitespace or headers
-                        if len(key) > 16:
-                            logger.info(f"Key preview (first 32 bytes): {key[:32]}")
+                    logger.info(f"Found encryption key URI: {key_url}")
                     
                     # Get IV from key info or use default
                     iv = None
@@ -290,11 +304,11 @@ class M3U8Parser:
                     
                     return {
                         'method': 'AES-128',
-                        'key': key,
+                        'key_uri': key_url,
                         'iv': iv
                     }
                 except Exception as e:
-                    logger.error(f"Failed to fetch encryption key: {e}")
+                    logger.error(f"Failed to read encryption info: {e}")
                     return None
         return None
     
@@ -304,7 +318,7 @@ class M3U8Parser:
         return info.get('key') if info else None
 
 
-def parse_m3u8(url: str, headers: Optional[Dict] = None) -> Dict:
+def parse_m3u8(url: str, headers: Optional[Dict] = None, session=None) -> Dict:
     """
     Convenience function to parse m3u8 URL
     
@@ -315,6 +329,6 @@ def parse_m3u8(url: str, headers: Optional[Dict] = None) -> Dict:
     Returns:
         Dict with segment information
     """
-    parser = M3U8Parser(url, headers)
+    parser = M3U8Parser(url, headers, session=session)
     return parser.parse()
 

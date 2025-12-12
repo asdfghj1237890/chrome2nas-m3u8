@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Chrome2NAS Video Downloader API",
     description="API for managing video downloads (M3U8 and MP4)",
-    version="1.1.0"
+    version="1.5.0"
 )
 
 # CORS middleware
@@ -123,7 +123,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Chrome2NAS M3U8 Downloader API",
-        "version": "1.0.0",
+        "version": "1.5.0",
         "status": "running"
     }
 

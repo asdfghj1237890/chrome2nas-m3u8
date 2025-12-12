@@ -1,6 +1,12 @@
 // Options Page Script for Chrome2NAS Video Downloader
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Display extension version (keep in sync with manifest.json)
+  const versionEl = document.getElementById('extVersion');
+  if (versionEl) {
+    versionEl.textContent = chrome.runtime.getManifest().version || '-';
+  }
+
   // Load saved settings
   loadSettings();
   

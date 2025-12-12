@@ -73,6 +73,10 @@ chrome.webRequest.onSendHeaders.addListener(
       
       console.log('Captured headers for:', details.url);
       console.log('Headers:', headersObj);
+      console.log('Has Cookie header:', !!headersObj['Cookie']);
+      if (headersObj['Cookie']) {
+        console.log('Cookie value:', headersObj['Cookie']);
+      }
       
       // Clean up old entries (keep only last 100)
       const keys = Object.keys(capturedHeaders);
@@ -85,7 +89,7 @@ chrome.webRequest.onSendHeaders.addListener(
     }
   },
   { urls: ["<all_urls>"] },
-  ["requestHeaders"]
+  ["requestHeaders", "extraHeaders"]
 );
 
 // Update badge with count of detected URLs

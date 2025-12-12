@@ -3,6 +3,7 @@
 let settings = {};
 let detectedUrls = [];
 let jobs = [];
+let expandedErrorIds = new Set(); // Track which error details are expanded
 
 // Initialize sidepanel
 document.addEventListener('DOMContentLoaded', async () => {
@@ -177,58 +178,192 @@ async function loadRecentJobs() {
   }
 }
 
-// Render jobs
+// Render jobs with smart update to avoid flickering
 function renderJobs() {
   const listElement = document.getElementById('recentJobsList');
+  const currentJobIds = new Set(jobs.map(j => j.id));
 
+  // 1. Handle Empty State
   if (jobs.length === 0) {
-    listElement.innerHTML = `
-      <div class="empty-state">
-        <p>No recent downloads</p>
-      </div>
-    `;
+    if (!listElement.querySelector('.empty-state')) {
+      listElement.innerHTML = `
+        <div class="empty-state">
+          <p>No recent downloads</p>
+        </div>
+      `;
+    }
     return;
   }
 
-  listElement.innerHTML = jobs.map(job => {
-    const canCancel = ['pending', 'downloading', 'processing'].includes(job.status);
-    const showProgress = job.status === 'downloading' || job.status === 'processing';
-    return `
-    <div class="job-item">
-      <div class="job-header">
-        <div class="job-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</div>
-        <div class="job-status ${job.status}">${getStatusLabel(job.status)}</div>
-      </div>
-      ${showProgress || canCancel ? `
-        <div class="job-progress">
-          ${showProgress ? `
-            <div class="progress-container">
-              <div class="progress-fill" style="width: ${job.progress}%"></div>
-            </div>
-            <div class="progress-text">${job.progress}%</div>
-          ` : ''}
-          ${canCancel ? `
-            <button class="btn-cancel" data-job-id="${job.id}" title="Cancel download">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="m15 9-6 6M9 9l6 6"/>
-              </svg>
-              <span>Cancel</span>
-            </button>
-          ` : ''}
-        </div>
-      ` : ''}
-    </div>
-  `;
-  }).join('');
+  // Remove empty state if present
+  const emptyState = listElement.querySelector('.empty-state');
+  if (emptyState) emptyState.remove();
 
-  // Add event listeners to cancel buttons
-  listElement.querySelectorAll('.btn-cancel').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const jobId = e.currentTarget.dataset.jobId;
-      cancelJob(jobId);
-    });
+  // 2. Update/Create items
+  jobs.forEach((job, index) => {
+    let itemEl = document.getElementById(`job-${job.id}`);
+
+    // Create if not exists
+    if (!itemEl) {
+      itemEl = document.createElement('div');
+      itemEl.className = 'job-item';
+      itemEl.id = `job-${job.id}`;
+      
+      // Insert at correct position
+      const nextSibling = listElement.children[index];
+      if (nextSibling) {
+        listElement.insertBefore(itemEl, nextSibling);
+      } else {
+        listElement.appendChild(itemEl);
+      }
+      
+      // Initial Render
+      itemEl.innerHTML = getJobInnerHtml(job);
+      bindJobEvents(itemEl, job.id);
+    } else {
+      // Update existing
+      const oldStatus = itemEl.dataset.status;
+      const oldProgress = itemEl.dataset.progress;
+
+      // Update data attributes
+      itemEl.dataset.status = job.status;
+      itemEl.dataset.progress = job.progress;
+      
+      // Check if full re-render is needed (structure change)
+      if (shouldFullRender(oldStatus, job.status)) {
+         itemEl.innerHTML = getJobInnerHtml(job);
+         bindJobEvents(itemEl, job.id);
+      } else {
+         // Minimal update (progress bar, text only)
+         updateJobElement(itemEl, job);
+      }
+      
+      // Ensure element is in correct position (if list order changed)
+      const currentIdx = Array.from(listElement.children).indexOf(itemEl);
+      if (currentIdx !== index) {
+         const nextSibling = listElement.children[index];
+         if (nextSibling) {
+            listElement.insertBefore(itemEl, nextSibling);
+         } else {
+            listElement.appendChild(itemEl);
+         }
+      }
+    }
   });
+
+  // 3. Remove old items
+  Array.from(listElement.children).forEach(child => {
+    if (child.id.startsWith('job-') && !currentJobIds.has(child.id.replace('job-', ''))) {
+      child.remove();
+    }
+  });
+}
+
+// Generate inner HTML for a job item
+function getJobInnerHtml(job) {
+  const canCancel = ['pending', 'downloading', 'processing'].includes(job.status);
+  const showProgress = job.status === 'downloading' || job.status === 'processing';
+  const isFailed = job.status === 'failed';
+  const errorInfo = isFailed ? getErrorInfo(job.error_message) : null;
+
+  return `
+    <div class="job-header">
+      <div class="job-title" title="${escapeHtml(job.title)}">${escapeHtml(job.title)}</div>
+      <div class="job-status ${job.status}">${getStatusLabel(job.status)}</div>
+    </div>
+    ${showProgress || canCancel ? `
+      <div class="job-progress">
+        ${showProgress ? `
+          <div class="progress-container">
+            <div class="progress-fill" style="width: ${job.progress}%"></div>
+          </div>
+          <div class="progress-text">${job.progress}%</div>
+        ` : ''}
+        ${canCancel ? `
+          <button class="btn-cancel" data-job-id="${job.id}" title="Cancel download">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="m15 9-6 6M9 9l6 6"/>
+            </svg>
+            <span>Cancel</span>
+          </button>
+        ` : ''}
+      </div>
+    ` : ''}
+    ${isFailed && errorInfo ? `
+      <details class="error-details" data-job-id="${job.id}" ${expandedErrorIds.has(job.id) ? 'open' : ''}>
+        <summary class="error-summary">
+          <div class="error-icon">!</div>
+          <span class="error-type">${escapeHtml(errorInfo.type)}</span>
+          <span class="error-expand-icon">▶</span>
+        </summary>
+        <div class="error-content">
+          <div class="error-message">${escapeHtml(errorInfo.message)}</div>
+          <div class="error-solution">
+            <div class="error-solution-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a6 6 0 0 1 6 6c0 7-3 9-3 9h-6s-3-2-3-9a6 6 0 0 1 6-6Z"/>
+                <path d="M9 18h6"/>
+                <path d="M10 22h4"/>
+              </svg>
+              Suggested Solution
+            </div>
+            <div class="error-solution-text">${errorInfo.solution}</div>
+          </div>
+        </div>
+      </details>
+    ` : ''}
+  `;
+}
+
+// Check if full re-render is needed
+function shouldFullRender(oldStatus, newStatus) {
+  // If status changed to/from 'downloading'/'processing' (progress bar visibility changes)
+  const hasProgress = s => ['downloading', 'processing'].includes(s);
+  const isFailed = s => s === 'failed';
+  
+  if (oldStatus !== newStatus) {
+    if (hasProgress(oldStatus) !== hasProgress(newStatus)) return true;
+    if (isFailed(oldStatus) !== isFailed(newStatus)) return true;
+    if (['pending', 'completed', 'cancelled'].includes(newStatus)) return true;
+  }
+  
+  return false;
+}
+
+// Update existing element without re-rendering HTML
+function updateJobElement(el, job) {
+  // Update status label
+  const statusEl = el.querySelector('.job-status');
+  if (statusEl) {
+    statusEl.className = `job-status ${job.status}`;
+    statusEl.textContent = getStatusLabel(job.status);
+  }
+  
+  // Update progress bar
+  const fillEl = el.querySelector('.progress-fill');
+  const textEl = el.querySelector('.progress-text');
+  if (fillEl) fillEl.style.width = `${job.progress}%`;
+  if (textEl) textEl.textContent = `${job.progress}%`;
+}
+
+// Bind events to job item elements
+function bindJobEvents(el, jobId) {
+  const cancelBtn = el.querySelector('.btn-cancel');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => cancelJob(jobId));
+  }
+  
+  const details = el.querySelector('.error-details');
+  if (details) {
+    details.addEventListener('toggle', (e) => {
+      if (e.target.open) {
+        expandedErrorIds.add(jobId);
+      } else {
+        expandedErrorIds.delete(jobId);
+      }
+    });
+  }
 }
 
 
@@ -340,6 +475,116 @@ function getStatusLabel(status) {
     'cancelled': 'Cancelled'
   };
   return labels[status] || status;
+}
+
+// Parse error message and return type, message, and solution
+function getErrorInfo(errorMessage) {
+  if (!errorMessage) {
+    return {
+      type: 'Unknown Error',
+      message: 'No error details available',
+      solution: 'Try again or check the NAS logs for more information.'
+    };
+  }
+
+  const msg = errorMessage.toLowerCase();
+
+  // 403 Forbidden - IP restriction or authentication issue
+  if (msg.includes('403') || msg.includes('forbidden')) {
+    return {
+      type: 'Access Denied (403)',
+      message: errorMessage,
+      solution: `This website likely uses <strong>IP-based authentication</strong>. The video URL was generated for your PC's IP address, but your NAS has a different IP.
+        <ul>
+          <li>Use <strong>Tailscate Exit Node</strong> to route NAS traffic through your PC</li>
+          <li>Run the downloader on your local PC instead of NAS</li>
+          <li>Use a VPN to give both devices the same public IP</li>
+        </ul>`
+    };
+  }
+
+  // 404 Not Found
+  if (msg.includes('404') || msg.includes('not found')) {
+    return {
+      type: 'Not Found (404)',
+      message: errorMessage,
+      solution: `The video URL is no longer valid.
+        <ul>
+          <li>The URL has expired</li>
+          <li>The video was removed</li>
+          <li>The link is temporary and needs to be refreshed</li>
+        </ul>
+        Try refreshing the video page and sending a new download request.`
+    };
+  }
+
+  // Timeout errors
+  if (msg.includes('timeout') || msg.includes('timed out')) {
+    return {
+      type: 'Connection Timeout',
+      message: errorMessage,
+      solution: `The connection to the video server timed out.
+        <ul>
+          <li>Check your NAS network connection</li>
+          <li>The video server might be slow or overloaded</li>
+          <li>Try again later</li>
+        </ul>`
+    };
+  }
+
+  // SSL/TLS errors
+  if (msg.includes('ssl') || msg.includes('certificate') || msg.includes('tls')) {
+    return {
+      type: 'SSL/TLS Error',
+      message: errorMessage,
+      solution: `There was a problem with the secure connection.
+        <ul>
+          <li>Check if your NAS system time is correct</li>
+          <li>The website might have an invalid certificate</li>
+          <li>Try updating the downloader to the latest version</li>
+        </ul>`
+    };
+  }
+
+  // Connection errors
+  if (msg.includes('connection') || msg.includes('network') || msg.includes('unreachable')) {
+    return {
+      type: 'Connection Error',
+      message: errorMessage,
+      solution: `Could not connect to the video server.
+        <ul>
+          <li>Check your NAS internet connection</li>
+          <li>The video server might be down</li>
+          <li>Check if your NAS can access external websites</li>
+        </ul>`
+    };
+  }
+
+  // No segments found
+  if (msg.includes('no segments') || msg.includes('empty playlist')) {
+    return {
+      type: 'Invalid Playlist',
+      message: errorMessage,
+      solution: `The m3u8 playlist is empty or invalid.
+        <ul>
+          <li>The video requires authentication</li>
+          <li>The playlist URL is incomplete</li>
+          <li>The video format is not supported</li>
+        </ul>`
+    };
+  }
+
+  // Generic error
+  return {
+    type: 'Download Failed',
+    message: errorMessage,
+    solution: `An error occurred during download.
+      <ul>
+        <li>Check NAS logs for more details</li>
+        <li>Try refreshing the video page and resending</li>
+        <li>Some websites have download protection that cannot be bypassed</li>
+      </ul>`
+  };
 }
 
 function escapeHtml(text) {

@@ -364,6 +364,138 @@ html, body {
   background: #9ca3af;
 }
 
+/* Error Details - Expandable */
+.error-details {
+  margin-top: 10px;
+  border: 1px solid #fee2e2;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.error-details[open] {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border-color: #fecaca;
+}
+
+.error-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  background: #fff;
+  transition: background 0.15s;
+}
+
+.error-summary:hover {
+  background: #fef2f2;
+}
+
+.error-summary::-webkit-details-marker {
+  display: none;
+}
+
+.error-icon {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #fee2e2;
+  border-radius: 50%;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.error-type {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.error-expand-icon {
+  font-size: 10px;
+  color: #9ca3af;
+  transition: transform 0.2s ease;
+}
+
+.error-details[open] .error-expand-icon {
+  transform: rotate(90deg);
+  color: #dc2626;
+}
+
+.error-content {
+  padding: 14px;
+  border-top: 1px solid #fee2e2;
+  background: #fff;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.error-message {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: #b91c1c;
+  background: #fef2f2;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  word-break: break-all;
+  line-height: 1.4;
+  border: 1px solid #fecaca;
+}
+
+.error-solution {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.error-solution-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.error-solution-title svg {
+  color: #059669; /* Green bulb */
+}
+
+.error-solution p {
+  margin: 0;
+  color: #4b5563;
+}
+
+.error-solution strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.error-solution ul {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.error-solution li {
+  margin-bottom: 4px;
+}
+
 /* Footer - Hidden */
 .footer {
   display: none;

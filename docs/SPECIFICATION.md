@@ -101,20 +101,28 @@ This document specifies a complete system for capturing m3u8 video stream URLs f
 {
   "manifest_version": 3,
   "name": "Chrome2NAS M3U8 Downloader",
-  "version": "1.0.0",
+  "version": "1.5.0",
+  "description": "Send m3u8 and mp4 videos to your NAS for download",
   "permissions": [
-    "webRequest",
     "storage",
     "contextMenus",
-    "notifications"
+    "notifications",
+    "webRequest",
+    "webNavigation",
+    "sidePanel",
+    "cookies"
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
-  }
+    "default_title": "Open Video Downloader"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_page": "options/options.html"
 }
 ```
 
@@ -156,7 +164,7 @@ services:
   api:
     build: ./api
     ports:
-      - "52052:8000"
+      - "52052:8000"  # NAS host port 52052 → API container port 8000
     environment:
       - API_KEY=${API_KEY}
       - DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db

@@ -46,7 +46,7 @@ This document provides detailed architecture diagrams and explanations for the C
 │  │  │  • Authentication                               │     │  │
 │  │  │  • Job management                               │     │  │
 │  │  │  • Status tracking                              │     │  │
-│  │  │  Port: 52052 (exposed)                          │     │  │
+│  │  │  Port: 52052 (host → API:8000)                  │     │  │
 │  │  └──────────────┬──────────────┬───────────────────┘     │  │
 │  │                 ↓              ↓                          │  │
 │  │   ┌─────────────────┐  ┌─────────────────┐              │  │

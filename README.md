@@ -1226,7 +1226,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Version**: 1.5.0  
 **Last Updated**: 2025-12-12  
-**Port**: 52052 (unified)
+**Port**: 52052 (NAS host port → API container :8000)
 
 ## Star History
 

@@ -7,14 +7,40 @@ let currentTabUrls = {};
 // Store captured request headers for m3u8 URLs
 let capturedHeaders = {};
 
+function isCandidateVideoUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+
+  const urlLower = rawUrl.toLowerCase();
+  if (!(urlLower.includes('.m3u8') || urlLower.includes('.mp4'))) return false;
+
+  // Reject obvious non-video resources even if they contain ".mp4" or ".m3u8" in the name.
+  // Example: "preview_720p.mp4.jpg" is an image, not a real mp4.
+  const nonVideoFinalExts = [
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.ico',
+    '.css', '.js', '.mjs',
+    '.html', '.htm',
+    '.json', '.txt'
+  ];
+
+  let pathnameLower = '';
+  try {
+    const u = new URL(rawUrl);
+    pathnameLower = (u.pathname || '').toLowerCase();
+  } catch (_) {
+    // Fallback: strip query/fragment and treat it as a path-like string
+    pathnameLower = rawUrl.split(/[?#]/)[0].toLowerCase();
+  }
+
+  const lastSegment = pathnameLower.split('/').pop() || '';
+  if (nonVideoFinalExts.some(ext => lastSegment.endsWith(ext))) return false;
+
+  return true;
+}
+
 // Listen for web requests to detect video URLs (m3u8, mp4)
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
-    const urlLower = details.url.toLowerCase();
-    
-    // Check if URL contains video file extensions
-    const isVideo = urlLower.includes('.m3u8') || urlLower.includes('.mp4');
-    if (isVideo) {
+    if (isCandidateVideoUrl(details.url)) {
       console.log('Detected video URL:', details.url);
       
       // Store URL with tab info (preserve original URL case)
@@ -51,7 +77,7 @@ chrome.webRequest.onSendHeaders.addListener(
     const urlLower = details.url.toLowerCase();
     
     // Only capture headers for video URLs
-    if (urlLower.includes('.m3u8') || urlLower.includes('.mp4')) {
+    if (isCandidateVideoUrl(details.url)) {
       // Convert headers array to object
       const headersObj = {};
       const SINGLETON_HEADERS = new Set(['User-Agent', 'Referer', 'Origin']);
@@ -158,8 +184,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   
   // Check if it's a video URL (m3u8 or mp4)
   const urlLower = url ? url.toLowerCase() : '';
-  const isVideoUrl = urlLower.includes('.m3u8') || urlLower.includes('.mp4');
-  if (url && isVideoUrl) {
+  const isVideoUrl = url && isCandidateVideoUrl(url);
+  if (isVideoUrl) {
     sendToNAS(url, tab.title, tab.url);
   } else {
     // Try to find video URL in current tab
@@ -177,6 +203,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // Send URL to NAS
 async function sendToNAS(url, pageTitle, pageUrl) {
   try {
+    if (!isCandidateVideoUrl(url)) {
+      showNotification('Error', 'Not a valid video URL');
+      return;
+    }
+
     // Get settings
     const settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey']);
     

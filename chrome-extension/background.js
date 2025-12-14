@@ -3,6 +3,7 @@
 // Store detected video URLs (m3u8, mp4)
 let detectedUrls = new Set();
 let currentTabUrls = {};
+let currentTabUrlKeys = {};
 
 // Store captured request headers for m3u8 URLs
 let capturedHeaders = {};
@@ -52,13 +53,30 @@ chrome.webRequest.onBeforeRequest.addListener(
       };
       
       // Add to detected URLs
-      detectedUrls.add(JSON.stringify(urlInfo));
+      // Deduplicate globally by exact URL string
+      detectedUrls.add(details.url);
       
       // Store for current tab
       if (!currentTabUrls[details.tabId]) {
         currentTabUrls[details.tabId] = [];
       }
-      currentTabUrls[details.tabId].push(urlInfo);
+      if (!currentTabUrlKeys[details.tabId]) {
+        currentTabUrlKeys[details.tabId] = new Set();
+      }
+
+      // Deduplicate per-tab by exact URL string: only show once in sidepanel
+      if (!currentTabUrlKeys[details.tabId].has(details.url)) {
+        currentTabUrlKeys[details.tabId].add(details.url);
+        currentTabUrls[details.tabId].push(urlInfo);
+      } else {
+        // Update the existing entry's metadata (keep ordering stable)
+        const list = currentTabUrls[details.tabId];
+        const existing = list.find(item => item && item.url === details.url);
+        if (existing) {
+          existing.timestamp = urlInfo.timestamp;
+          existing.pageUrl = urlInfo.pageUrl;
+        }
+      }
       
       // Update badge
       updateBadge(details.tabId);
@@ -157,6 +175,7 @@ function updateBadge(tabId) {
 // Clean up when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete currentTabUrls[tabId];
+  delete currentTabUrlKeys[tabId];
 });
 
 // Clear detected URLs when page navigates or reloads
@@ -164,6 +183,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   if (details.frameId === 0) { // Only for main frame
     // Clear URLs for this tab on navigation/reload
     currentTabUrls[details.tabId] = [];
+    currentTabUrlKeys[details.tabId] = new Set();
     updateBadge(details.tabId);
     chrome.storage.local.set({ detectedUrls: Array.from(detectedUrls) });
   }

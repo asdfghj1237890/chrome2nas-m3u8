@@ -287,36 +287,251 @@ class DownloadWorker:
             )
             response.raise_for_status()
             
+            # If the origin throttles single-connection throughput, try multi-connection
+            # downloads via HTTP Range requests (byte ranges). Fall back to single stream
+            # if the server does not support ranges.
             total_size = int(response.headers.get('content-length', 0))
+            response.close()
             downloaded_size = 0
-            chunk_size = 1024 * 1024  # 1MB chunks
+
+            # Throughput tuning:
+            # - Larger chunk sizes reduce Python overhead
+            # - Throttle DB progress updates / cancellation checks (DB I/O is expensive)
+            # Important: iter_content() only yields once it has buffered up to chunk_size.
+            # If the origin throttles bandwidth, very large chunks make progress updates
+            # appear "stuck" for tens of seconds. Use a smaller read chunk so the
+            # time-based throttling actually triggers.
+            chunk_size = 1024 * 1024  # 1MB
+
+            check_interval_sec = 4.0
+            check_bytes_step = 16 * 1024 * 1024
+
+            next_check_time = time.monotonic() + check_interval_sec
+            next_check_bytes = check_bytes_step
+            last_reported_progress = -1
             
             logger.info(f"Downloading {total_size / 1024 / 1024:.2f} MB to {output_file}")
-            
-            check_interval = 5 * 1024 * 1024  # Check cancellation every 5MB
-            bytes_since_check = 0
-            
-            with open(output_file, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded_size += len(chunk)
-                        bytes_since_check += len(chunk)
-                        
-                        if total_size > 0:
-                            progress = int((downloaded_size / total_size) * 95)
-                            self.update_job_status(job_id, "downloading", progress=progress)
-                        
-                        # Check for cancellation periodically
-                        if bytes_since_check >= check_interval:
-                            bytes_since_check = 0
-                            if self.is_job_cancelled(job_id):
-                                logger.info(f"Job {job_id} was cancelled during download, aborting")
-                                response.close()
-                                # Clean up partial file
-                                if Path(output_file).exists():
-                                    Path(output_file).unlink()
-                                return
+
+            def _single_stream_download():
+                nonlocal downloaded_size, next_check_time, next_check_bytes, last_reported_progress
+                downloaded_size = 0
+                next_check_time = time.monotonic() + check_interval_sec
+                next_check_bytes = check_bytes_step
+                last_reported_progress = -1
+
+                resp = session.get(
+                    job["url"],
+                    headers=headers,
+                    stream=True,
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                try:
+                    with open(output_file, "wb") as f:
+                        for chunk in resp.iter_content(chunk_size=chunk_size):
+                            if not chunk:
+                                continue
+                            f.write(chunk)
+                            downloaded_size += len(chunk)
+
+                            now = time.monotonic()
+                            if downloaded_size >= next_check_bytes or now >= next_check_time:
+                                if self.is_job_cancelled(job_id):
+                                    logger.info(f"Job {job_id} was cancelled during download, aborting")
+                                    resp.close()
+                                    if Path(output_file).exists():
+                                        Path(output_file).unlink()
+                                    return False
+
+                                if total_size > 0:
+                                    progress = int((downloaded_size / total_size) * 95)
+                                    if progress != last_reported_progress:
+                                        self.update_job_status(job_id, "downloading", progress=progress)
+                                        last_reported_progress = progress
+
+                                next_check_time = now + check_interval_sec
+                                next_check_bytes = downloaded_size + check_bytes_step
+                    return True
+                finally:
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+
+            def _probe_range_support() -> tuple[bool, int]:
+                # Some servers don't advertise Accept-Ranges but still support it.
+                # Probe with a 1-byte range and require HTTP 206 with Content-Range.
+                probe_headers = headers.copy()
+                probe_headers["Range"] = "bytes=0-0"
+                probe_headers["Accept-Encoding"] = "identity"
+                resp = session.get(
+                    job["url"],
+                    headers=probe_headers,
+                    stream=True,
+                    timeout=30,
+                )
+                try:
+                    if resp.status_code != 206:
+                        return False, 0
+                    content_range = resp.headers.get("Content-Range", "")
+                    # Expected: "bytes 0-0/12345"
+                    if "/" not in content_range:
+                        return False, 0
+                    total_str = content_range.split("/", 1)[1].strip()
+                    if total_str == "*" or not total_str.isdigit():
+                        return False, 0
+                    total = int(total_str)
+                    if total <= 1:
+                        return False, 0
+                    return True, total
+                finally:
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+
+            range_supported, probed_total = _probe_range_support()
+            if range_supported:
+                if total_size <= 0:
+                    total_size = probed_total
+                logger.info("Range requests supported; using multi-connection download")
+
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                import threading
+
+                range_workers = 4
+                min_range_bytes = 32 * 1024 * 1024  # 32MB threshold to avoid overhead
+                if total_size < min_range_bytes:
+                    logger.info("File small; using single-stream download")
+                    ok = _single_stream_download()
+                    if not ok:
+                        return
+                else:
+                    stop_event = threading.Event()
+                    progress_lock = threading.Lock()
+                    db_lock = threading.Lock()
+                    part_paths = [None] * range_workers
+
+                    # Pre-compute ranges (inclusive end)
+                    part_size = total_size // range_workers
+                    ranges = []
+                    for i in range(range_workers):
+                        start = i * part_size
+                        end = (start + part_size - 1) if i < range_workers - 1 else (total_size - 1)
+                        ranges.append((i, start, end))
+
+                    out_path = Path(output_file)
+                    part_files = [out_path.with_suffix(out_path.suffix + f".part{i:02d}") for i in range(range_workers)]
+
+                    def _download_part(part_idx: int, start: int, end: int) -> str:
+                        nonlocal downloaded_size, next_check_time, next_check_bytes, last_reported_progress
+                        part_headers = headers.copy()
+                        part_headers["Range"] = f"bytes={start}-{end}"
+                        part_headers["Accept-Encoding"] = "identity"
+
+                        resp = session.get(
+                            job["url"],
+                            headers=part_headers,
+                            stream=True,
+                            timeout=30,
+                        )
+                        try:
+                            # If server ignores Range, it will often return 200.
+                            if resp.status_code != 206:
+                                raise RuntimeError(f"Range request not honored (status {resp.status_code})")
+                            resp.raise_for_status()
+
+                            with open(part_files[part_idx], "wb") as f:
+                                for chunk in resp.iter_content(chunk_size=chunk_size):
+                                    if stop_event.is_set():
+                                        return ""
+                                    if not chunk:
+                                        continue
+                                    f.write(chunk)
+
+                                    now = time.monotonic()
+                                    do_check = False
+                                    with progress_lock:
+                                        downloaded_size += len(chunk)
+                                        if downloaded_size >= next_check_bytes or now >= next_check_time:
+                                            do_check = True
+                                            next_check_time = now + check_interval_sec
+                                            next_check_bytes = downloaded_size + check_bytes_step
+
+                                    if do_check:
+                                        # Only one thread does DB work at a time (don't block other
+                                        # threads updating downloaded_size while DB is slow).
+                                        with db_lock:
+                                            if self.is_job_cancelled(job_id):
+                                                stop_event.set()
+                                                return ""
+                                            if total_size > 0:
+                                                with progress_lock:
+                                                    current_downloaded = downloaded_size
+                                                progress = int((current_downloaded / total_size) * 95)
+                                                if progress != last_reported_progress:
+                                                    self.update_job_status(job_id, "downloading", progress=progress)
+                                                    last_reported_progress = progress
+
+                            return str(part_files[part_idx])
+                        finally:
+                            try:
+                                resp.close()
+                            except Exception:
+                                pass
+
+                    try:
+                        with ThreadPoolExecutor(max_workers=range_workers) as ex:
+                            futures = [ex.submit(_download_part, i, s, e) for (i, s, e) in ranges]
+                            for fut in as_completed(futures):
+                                result = fut.result()
+                                if not result or stop_event.is_set():
+                                    stop_event.set()
+                                    raise Exception("Download cancelled by user")
+
+                        # Assemble parts in order
+                        if stop_event.is_set():
+                            raise Exception("Download cancelled by user")
+
+                        with open(output_file, "wb") as out_f:
+                            for i in range(range_workers):
+                                part_path = part_files[i]
+                                with open(part_path, "rb") as in_f:
+                                    shutil.copyfileobj(in_f, out_f, length=1024 * 1024)
+                    except Exception as e:
+                        # If range download fails for any reason, fall back to single-stream
+                        logger.warning(f"Range download failed, falling back to single stream: {e}")
+                        stop_event.set()
+                        # Clean up partial parts
+                        for p in part_files:
+                            try:
+                                if p.exists():
+                                    p.unlink()
+                            except Exception:
+                                pass
+                        # Clean up partial output
+                        try:
+                            if Path(output_file).exists():
+                                Path(output_file).unlink()
+                        except Exception:
+                            pass
+
+                        ok = _single_stream_download()
+                        if not ok:
+                            return
+                    finally:
+                        # Cleanup part files if they still exist
+                        for p in part_files:
+                            try:
+                                if p.exists():
+                                    p.unlink()
+                            except Exception:
+                                pass
+            else:
+                logger.info("Range requests not supported; using single-stream download")
+                ok = _single_stream_download()
+                if not ok:
+                    return
             
             # Final cancellation check before marking complete
             if self.is_job_cancelled(job_id):
@@ -711,7 +926,7 @@ def main():
     """Main entry point"""
     logger.info("="*50)
     logger.info("Chrome2NAS M3U8 Downloader Worker")
-    logger.info("Version: 2.0.0 (Phase 2 - Full Download)")
+    logger.info("Version: 1.5.0")
     logger.info("="*50)
     
     # Wait for database to be ready

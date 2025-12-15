@@ -49,7 +49,7 @@ jobs:
 
       - name: 'Create docker package'
         run: |
-          cd m3u8-downloader
+          cd video-downloader
           zip -r ../WebVideo2NAS-downloader-docker.zip .
 
       - name: 'Create Release'

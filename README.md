@@ -1106,7 +1106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details>
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
-### [1.8.2] - 2025-12-16
+### [1.8.3] - 2025-12-16
 
 #### Added
 - Add `db_cleanup` service to prune finished jobs (keep latest 100) on an interval via `CLEANUP_INTERVAL_SECONDS`
@@ -1272,7 +1272,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**Version**: 1.8.2  
+**Version**: 1.8.3  
 **Last Updated**: 2025-12-16  
 **Port**: 52052 (NAS host port → API container :8000)
 

@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Auto-save checkboxes
   document.getElementById('autoDetect').addEventListener('change', savePreferences);
   document.getElementById('showNotifications').addEventListener('change', savePreferences);
+  document.getElementById('uiLanguage').addEventListener('change', savePreferences);
 });
 
 // Load settings from storage
@@ -25,13 +26,17 @@ async function loadSettings() {
     'nasEndpoint',
     'apiKey',
     'autoDetect',
-    'showNotifications'
+    'showNotifications',
+    'uiLanguage'
   ]);
   
   document.getElementById('nasEndpoint').value = settings.nasEndpoint || '';
   document.getElementById('apiKey').value = settings.apiKey || '';
   document.getElementById('autoDetect').checked = settings.autoDetect !== false;
   document.getElementById('showNotifications').checked = settings.showNotifications !== false;
+  // Backward compatibility: previous versions used "zh" (treated as zh-TW now).
+  const uiLanguage = settings.uiLanguage === 'zh' ? 'zh-TW' : (settings.uiLanguage || '');
+  document.getElementById('uiLanguage').value = uiLanguage;
 }
 
 // Save settings
@@ -80,10 +85,12 @@ async function saveSettings() {
 async function savePreferences() {
   const autoDetect = document.getElementById('autoDetect').checked;
   const showNotifications = document.getElementById('showNotifications').checked;
+  const uiLanguage = (document.getElementById('uiLanguage').value || '').trim();
   
   await chrome.storage.sync.set({
     autoDetect: autoDetect,
-    showNotifications: showNotifications
+    showNotifications: showNotifications,
+    uiLanguage: uiLanguage
   });
 }
 

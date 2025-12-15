@@ -5,10 +5,60 @@ let detectedUrls = [];
 let jobs = [];
 let expandedErrorIds = new Set(); // Track which error details are expanded
 
+const i18n = (typeof window !== 'undefined' && window.WV2N_I18N) ? window.WV2N_I18N : null;
+function t(key, vars) {
+  if (!i18n) return key;
+  return i18n.t(key, vars);
+}
+function tHtml(key, vars) {
+  if (!i18n) return t(key, vars);
+  return i18n.tHtml(key, vars);
+}
+
+function applyUiLanguage() {
+  // Priority:
+  // 1) If user selected a language (uiLanguage), use it.
+  // 2) Otherwise, use browser language if it maps to zh/en/ja/fr/es/pt.
+  // 3) If not matched, default English. (Handled inside i18n.js)
+  if (i18n) {
+    i18n.setLanguage((settings.uiLanguage || '').trim());
+  }
+  localizeStaticText();
+}
+
+function localizeStaticText() {
+  // Header button titles
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) refreshBtn.setAttribute('title', t('btn.refresh.title'));
+  const settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) settingsBtn.setAttribute('title', t('btn.settings.title'));
+
+  // Section titles
+  const detectedTitle = document.getElementById('detectedVideosTitle');
+  if (detectedTitle) detectedTitle.textContent = t('section.detectedVideos');
+  const recentTitle = document.getElementById('recentDownloadsTitle');
+  if (recentTitle) recentTitle.textContent = t('section.recentDownloads');
+
+  // Empty states (initial HTML only; list renders will overwrite as needed)
+  const detectedEmptyTitle = document.getElementById('detectedEmptyTitle');
+  if (detectedEmptyTitle) detectedEmptyTitle.textContent = t('empty.noVideos.title');
+  const detectedEmptyHint = document.getElementById('detectedEmptyHint');
+  if (detectedEmptyHint) detectedEmptyHint.textContent = t('empty.noVideos.hint');
+  const jobsEmptyTitle = document.getElementById('jobsEmptyTitle');
+  if (jobsEmptyTitle) jobsEmptyTitle.textContent = t('empty.noJobs.title');
+
+  // Status text default
+  const statusText = document.getElementById('statusText');
+  if (statusText && statusText.textContent === 'Checking...') {
+    statusText.textContent = t('status.checking');
+  }
+}
+
 // Initialize sidepanel
 document.addEventListener('DOMContentLoaded', async () => {
   // Load settings
-  settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey']);
+  settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey', 'uiLanguage']);
+  applyUiLanguage();
 
   // Check connection
   checkConnection();
@@ -51,6 +101,16 @@ function setupEventListeners() {
     if (areaName === 'local' && changes.detectedUrls) {
       loadDetectedUrls();
     }
+    if (areaName === 'sync' && changes.uiLanguage) {
+      settings.uiLanguage = changes.uiLanguage.newValue || '';
+      applyUiLanguage();
+      renderDetectedUrls();
+      // Force full re-render so translated labels update
+      const listElement = document.getElementById('recentJobsList');
+      if (listElement) listElement.innerHTML = '';
+      renderJobs();
+      checkConnection();
+    }
   });
 }
 
@@ -67,7 +127,7 @@ async function checkConnection() {
 
   if (!settings.nasEndpoint || !settings.apiKey) {
     statusElement.className = 'connection-status disconnected';
-    statusText.textContent = 'Not configured';
+    statusText.textContent = t('status.notConfigured');
     statusIcon.textContent = '⚠️';
     return;
   }
@@ -82,14 +142,14 @@ async function checkConnection() {
 
     if (response.ok) {
       statusElement.className = 'connection-status connected';
-      statusText.textContent = 'Connected';
+      statusText.textContent = t('status.connected');
       statusIcon.textContent = '✅';
     } else {
       throw new Error('Connection failed');
     }
   } catch (error) {
     statusElement.className = 'connection-status disconnected';
-    statusText.textContent = 'Disconnected';
+    statusText.textContent = t('status.disconnected');
     statusIcon.textContent = '❌';
   }
 }
@@ -109,8 +169,8 @@ function renderDetectedUrls() {
   if (detectedUrls.length === 0) {
     listElement.innerHTML = `
       <div class="empty-state">
-        <p>🔍 No videos detected yet</p>
-        <p class="hint">Browse to a video streaming site</p>
+        <p>${escapeHtml(t('empty.noVideos.title'))}</p>
+        <p class="hint">${escapeHtml(t('empty.noVideos.hint'))}</p>
       </div>
     `;
     return;
@@ -126,18 +186,16 @@ function renderDetectedUrls() {
       <div class="url-link" title="${escapeHtml(urlInfo.url)}">${escapeHtml(truncateUrl(urlInfo.url))}</div>
       ${hasIp ? `
         <div class="ip-warning">
-          <strong>IP-Restricted URL Detected</strong><br>
-          This URL contains an IP address, meaning the website restricts downloads to that specific IP. 
-          To download successfully, your NAS and PC must use the same IP address. 
-          Use Tailscale exit node or similar VPN solution to route the traffic through a same IP address.
+          <strong>${escapeHtml(t('url.ipWarning.title'))}</strong><br>
+          ${tHtml('url.ipWarning.body')}
         </div>
       ` : ''}
       <div class="url-actions">
         <button class="btn-send" data-url="${escapeHtml(urlInfo.url)}" data-page="${escapeHtml(urlInfo.pageUrl || '')}">
-          Send to NAS
+          ${escapeHtml(t('url.sendToNas'))}
         </button>
         <button class="btn-copy" data-url="${escapeHtml(urlInfo.url)}">
-          Copy
+          ${escapeHtml(t('url.copy'))}
         </button>
       </div>
     </div>
@@ -193,7 +251,7 @@ function renderJobs() {
     if (!listElement.querySelector('.empty-state')) {
       listElement.innerHTML = `
         <div class="empty-state">
-          <p>No recent downloads</p>
+          <p>${escapeHtml(t('empty.noJobs.short'))}</p>
         </div>
       `;
     }
@@ -271,7 +329,7 @@ function getJobInnerHtml(job) {
   const isFailed = job.status === 'failed';
   const errorInfo = isFailed ? getErrorInfo(job.error_message) : null;
   const statusTooltip = (job.status === 'completed' && typeof job.duration === 'number')
-    ? `Duration: ${formatDuration(job.duration)}`
+    ? t('job.duration', { duration: formatDuration(job.duration) })
     : '';
 
   return `
@@ -288,12 +346,12 @@ function getJobInnerHtml(job) {
           <div class="progress-text">${job.progress}%</div>
         ` : ''}
         ${canCancel ? `
-          <button class="btn-cancel" data-job-id="${job.id}" title="Cancel download">
+          <button class="btn-cancel" data-job-id="${job.id}" title="${escapeHtml(t('job.cancel.title'))}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <path d="m15 9-6 6M9 9l6 6"/>
             </svg>
-            <span>Cancel</span>
+            <span>${escapeHtml(t('job.cancel'))}</span>
           </button>
         ` : ''}
       </div>
@@ -314,7 +372,7 @@ function getJobInnerHtml(job) {
                 <path d="M9 18h6"/>
                 <path d="M10 22h4"/>
               </svg>
-              Suggested Solution
+              ${escapeHtml(t('job.solution'))}
             </div>
             <div class="error-solution-text">${errorInfo.solution}</div>
           </div>
@@ -347,7 +405,7 @@ function updateJobElement(el, job) {
     statusEl.className = `job-status ${job.status}`;
     statusEl.textContent = getStatusLabel(job.status);
     const statusTooltip = (job.status === 'completed' && typeof job.duration === 'number')
-      ? `Duration: ${formatDuration(job.duration)}`
+      ? t('job.duration', { duration: formatDuration(job.duration) })
       : '';
     if (statusTooltip) {
       statusEl.setAttribute('title', statusTooltip);
@@ -386,7 +444,7 @@ function bindJobEvents(el, jobId) {
 // Send to NAS
 async function sendToNAS(url, pageUrl) {
   if (!settings.nasEndpoint || !settings.apiKey) {
-    alert('Please configure NAS settings first');
+    alert(t('alert.configureFirst'));
     chrome.runtime.openOptionsPage();
     return;
   }
@@ -394,7 +452,7 @@ async function sendToNAS(url, pageUrl) {
   try {
     // Get current tab title
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const title = tab.title || 'Untitled Video';
+    const title = tab.title || t('video.untitled');
 
     chrome.runtime.sendMessage({
       action: 'sendToNAS',
@@ -404,21 +462,21 @@ async function sendToNAS(url, pageUrl) {
     });
 
     // Show feedback
-    showToast('Sending to NAS...');
+    showToast(t('toast.sending'));
 
     // Refresh jobs after 2 seconds
     setTimeout(loadRecentJobs, 2000);
 
   } catch (error) {
     console.error('Error:', error);
-    showToast('Failed to send');
+    showToast(t('toast.failedToSend'));
   }
 }
 
 // Cancel job on NAS
 async function cancelJob(jobId) {
   if (!settings.nasEndpoint || !settings.apiKey) {
-    showToast('❌ NAS not configured');
+    showToast(t('toast.nasNotConfigured'));
     return;
   }
 
@@ -431,23 +489,23 @@ async function cancelJob(jobId) {
     });
 
     if (response.ok) {
-      showToast('Job cancelled');
+      showToast(t('toast.jobCancelled'));
       // Refresh jobs list
       await loadRecentJobs();
     } else {
       const error = await response.json();
-      showToast(`${error.detail || 'Failed to cancel'}`);
+      showToast(`${error.detail || t('toast.failedToCancel')}`);
     }
   } catch (error) {
     console.error('Error cancelling job:', error);
-    showToast('Failed to cancel job');
+    showToast(t('toast.failedToCancel'));
   }
 }
 
 // Copy to clipboard
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard');
+    showToast(t('toast.copied'));
   });
 }
 
@@ -482,24 +540,31 @@ function truncateUrl(url, maxLength = 60) {
 }
 
 function getStatusLabel(status) {
-  const labels = {
-    'pending': 'Pending',
-    'downloading': 'Downloading',
-    'processing': 'Processing',
-    'completed': 'Completed',
-    'failed': 'Failed',
-    'cancelled': 'Cancelled'
-  };
-  return labels[status] || status;
+  switch (status) {
+    case 'pending':
+      return t('jobStatus.pending');
+    case 'downloading':
+      return t('jobStatus.downloading');
+    case 'processing':
+      return t('jobStatus.processing');
+    case 'completed':
+      return t('jobStatus.completed');
+    case 'failed':
+      return t('jobStatus.failed');
+    case 'cancelled':
+      return t('jobStatus.cancelled');
+    default:
+      return status;
+  }
 }
 
 // Parse error message and return type, message, and solution
 function getErrorInfo(errorMessage) {
   if (!errorMessage) {
     return {
-      type: 'Unknown Error',
-      message: 'No error details available',
-      solution: 'Try again or check the NAS logs for more information.'
+      type: t('error.unknown.type'),
+      message: t('error.unknown.message'),
+      solution: t('error.unknown.solution')
     };
   }
 
@@ -508,98 +573,62 @@ function getErrorInfo(errorMessage) {
   // 403 Forbidden - IP restriction or authentication issue
   if (msg.includes('403') || msg.includes('forbidden')) {
     return {
-      type: 'Access Denied (403)',
+      type: t('error.403.type'),
       message: errorMessage,
-      solution: `This website likely uses <strong>IP-based authentication</strong>. The video URL was generated for your PC's IP address, but your NAS has a different IP.
-        <ul>
-          <li>Use <strong>Tailscate Exit Node</strong> to route NAS traffic through your PC</li>
-          <li>Run the downloader on your local PC instead of NAS</li>
-          <li>Use a VPN to give both devices the same public IP</li>
-        </ul>`
+      solution: t('error.403.solution')
     };
   }
 
   // 404 Not Found
   if (msg.includes('404') || msg.includes('not found')) {
     return {
-      type: 'Not Found (404)',
+      type: t('error.404.type'),
       message: errorMessage,
-      solution: `The video URL is no longer valid.
-        <ul>
-          <li>The URL has expired</li>
-          <li>The video was removed</li>
-          <li>The link is temporary and needs to be refreshed</li>
-        </ul>
-        Try refreshing the video page and sending a new download request.`
+      solution: t('error.404.solution')
     };
   }
 
   // Timeout errors
   if (msg.includes('timeout') || msg.includes('timed out')) {
     return {
-      type: 'Connection Timeout',
+      type: t('error.timeout.type'),
       message: errorMessage,
-      solution: `The connection to the video server timed out.
-        <ul>
-          <li>Check your NAS network connection</li>
-          <li>The video server might be slow or overloaded</li>
-          <li>Try again later</li>
-        </ul>`
+      solution: t('error.timeout.solution')
     };
   }
 
   // SSL/TLS errors
   if (msg.includes('ssl') || msg.includes('certificate') || msg.includes('tls')) {
     return {
-      type: 'SSL/TLS Error',
+      type: t('error.ssl.type'),
       message: errorMessage,
-      solution: `There was a problem with the secure connection.
-        <ul>
-          <li>Check if your NAS system time is correct</li>
-          <li>The website might have an invalid certificate</li>
-          <li>Try updating the downloader to the latest version</li>
-        </ul>`
+      solution: t('error.ssl.solution')
     };
   }
 
   // Connection errors
   if (msg.includes('connection') || msg.includes('network') || msg.includes('unreachable')) {
     return {
-      type: 'Connection Error',
+      type: t('error.connection.type'),
       message: errorMessage,
-      solution: `Could not connect to the video server.
-        <ul>
-          <li>Check your NAS internet connection</li>
-          <li>The video server might be down</li>
-          <li>Check if your NAS can access external websites</li>
-        </ul>`
+      solution: t('error.connection.solution')
     };
   }
 
   // No segments found
   if (msg.includes('no segments') || msg.includes('empty playlist')) {
     return {
-      type: 'Invalid Playlist',
+      type: t('error.invalidPlaylist.type'),
       message: errorMessage,
-      solution: `The m3u8 playlist is empty or invalid.
-        <ul>
-          <li>The video requires authentication</li>
-          <li>The playlist URL is incomplete</li>
-          <li>The video format is not supported</li>
-        </ul>`
+      solution: t('error.invalidPlaylist.solution')
     };
   }
 
   // Generic error
   return {
-    type: 'Download Failed',
+    type: t('error.generic.type'),
     message: errorMessage,
-    solution: `An error occurred during download.
-      <ul>
-        <li>Check NAS logs for more details</li>
-        <li>Try refreshing the video page and resending</li>
-        <li>Some websites have download protection that cannot be bypassed</li>
-      </ul>`
+    solution: t('error.generic.solution')
   };
 }
 

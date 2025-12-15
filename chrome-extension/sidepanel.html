@@ -33,13 +33,13 @@
     <!-- Detected URLs Section -->
     <div class="section">
       <div class="section-header">
-        <h2>Detected Videos</h2>
+        <h2 id="detectedVideosTitle">Detected Videos</h2>
       </div>
 
       <div id="detectedUrlsList" class="url-list">
         <div class="empty-state">
-          <p>🔍 No videos detected yet</p>
-          <p class="hint">Browse to a video streaming site</p>
+          <p id="detectedEmptyTitle">🔍 No videos detected yet</p>
+          <p id="detectedEmptyHint" class="hint">Browse to a video streaming site</p>
         </div>
       </div>
     </div>
@@ -47,12 +47,12 @@
     <!-- Recent Jobs Section -->
     <div class="section">
       <div class="section-header">
-        <h2>Recent Downloads on NAS</h2>
+        <h2 id="recentDownloadsTitle">Recent Downloads on NAS</h2>
       </div>
 
       <div id="recentJobsList" class="job-list">
         <div class="empty-state">
-          <p>📥 No recent downloads on NAS</p>
+          <p id="jobsEmptyTitle">📥 No recent downloads on NAS</p>
         </div>
       </div>
     </div>
@@ -63,6 +63,7 @@
   </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

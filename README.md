@@ -1100,6 +1100,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details>
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
+### [1.8.2] - 2025-12-16
+
+#### Fixed
+- Side panel now picks up updated NAS settings without getting stuck, and shows a more specific connection error reason
+- GitHub release workflow updated to use the renamed `video-downloader/` directory
+
+### [1.8.1] - 2025-12-16
+
+#### Changed
+- Rename `m3u8-downloader/` directory to `video-downloader/` and update related docs/config references
+
 ### [1.8.0] - 2025-12-16
 
 #### Added
@@ -1245,7 +1256,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**Version**: 1.8.1  
+**Version**: 1.8.2  
 **Last Updated**: 2025-12-16  
 **Port**: 52052 (NAS host port → API container :8000)
 

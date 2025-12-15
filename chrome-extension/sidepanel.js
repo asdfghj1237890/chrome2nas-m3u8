@@ -15,6 +15,11 @@ function tHtml(key, vars) {
   return i18n.tHtml(key, vars);
 }
 
+async function loadSettingsFromStorage() {
+  settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey', 'uiLanguage']);
+  return settings;
+}
+
 function applyUiLanguage() {
   // Priority:
   // 1) If user selected a language (uiLanguage), use it.
@@ -57,7 +62,7 @@ function localizeStaticText() {
 // Initialize sidepanel
 document.addEventListener('DOMContentLoaded', async () => {
   // Load settings
-  settings = await chrome.storage.sync.get(['nasEndpoint', 'apiKey', 'uiLanguage']);
+  await loadSettingsFromStorage();
   applyUiLanguage();
 
   // Check connection
@@ -101,15 +106,29 @@ function setupEventListeners() {
     if (areaName === 'local' && changes.detectedUrls) {
       loadDetectedUrls();
     }
-    if (areaName === 'sync' && changes.uiLanguage) {
-      settings.uiLanguage = changes.uiLanguage.newValue || '';
-      applyUiLanguage();
-      renderDetectedUrls();
-      // Force full re-render so translated labels update
-      const listElement = document.getElementById('recentJobsList');
-      if (listElement) listElement.innerHTML = '';
-      renderJobs();
-      checkConnection();
+    if (areaName === 'sync') {
+      const needsUiUpdate = !!changes.uiLanguage;
+      const needsConnUpdate = !!changes.nasEndpoint || !!changes.apiKey;
+
+      if (needsUiUpdate) {
+        settings.uiLanguage = changes.uiLanguage.newValue || '';
+        applyUiLanguage();
+        renderDetectedUrls();
+        // Force full re-render so translated labels update
+        const listElement = document.getElementById('recentJobsList');
+        if (listElement) listElement.innerHTML = '';
+        renderJobs();
+      }
+
+      if (needsConnUpdate) {
+        if (changes.nasEndpoint) settings.nasEndpoint = changes.nasEndpoint.newValue || '';
+        if (changes.apiKey) settings.apiKey = changes.apiKey.newValue || '';
+      }
+
+      if (needsUiUpdate || needsConnUpdate) {
+        checkConnection();
+        loadRecentJobs();
+      }
     }
   });
 }
@@ -119,38 +138,83 @@ function openSettings() {
   chrome.runtime.openOptionsPage();
 }
 
+function connectionReasonFromResponse(response) {
+  if (!response) return '';
+  if (response.status === 401) return t('options.status.invalidApiKey');
+  if (response.status === 404) return t('options.status.apiNotFound');
+  return `HTTP ${response.status}${response.statusText ? `: ${response.statusText}` : ''}`;
+}
+
+function connectionReasonFromError(error) {
+  if (!error) return '';
+  // AbortController timeout
+  if (error.name === 'AbortError') return t('error.timeout.type');
+  const msg = (error && error.message) ? String(error.message) : String(error);
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+    return t('options.status.cannotReach');
+  }
+  return msg;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Check NAS connection
 async function checkConnection() {
   const statusElement = document.getElementById('connectionStatus');
   const statusText = document.getElementById('statusText');
   const statusIcon = document.getElementById('statusIcon');
 
+  // Avoid stale state if options were updated while sidepanel is open
+  await loadSettingsFromStorage();
+
   if (!settings.nasEndpoint || !settings.apiKey) {
     statusElement.className = 'connection-status disconnected';
     statusText.textContent = t('status.notConfigured');
     statusIcon.textContent = '⚠️';
+    statusElement.title = '';
     return;
   }
 
+  statusElement.className = 'connection-status';
+  statusText.textContent = t('status.checking');
+  statusIcon.textContent = '⏳';
+  statusElement.title = settings.nasEndpoint;
+
   try {
-    const response = await fetch(`${settings.nasEndpoint}/api/health`, {
+    const url = `${settings.nasEndpoint}/api/health`;
+    const response = await fetchWithTimeout(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${settings.apiKey}`
       }
-    });
+    }, 5000);
 
     if (response.ok) {
       statusElement.className = 'connection-status connected';
       statusText.textContent = t('status.connected');
       statusIcon.textContent = '✅';
+      statusElement.title = `${settings.nasEndpoint}\n/api/health: OK`;
     } else {
-      throw new Error('Connection failed');
+      const reason = connectionReasonFromResponse(response);
+      statusElement.className = 'connection-status disconnected';
+      statusText.textContent = reason ? `${t('status.disconnected')} - ${reason}` : t('status.disconnected');
+      statusIcon.textContent = '❌';
+      statusElement.title = `${settings.nasEndpoint}\n/api/health: ${reason}`;
     }
   } catch (error) {
+    const reason = connectionReasonFromError(error);
     statusElement.className = 'connection-status disconnected';
-    statusText.textContent = t('status.disconnected');
+    statusText.textContent = reason ? `${t('status.disconnected')} - ${reason}` : t('status.disconnected');
     statusIcon.textContent = '❌';
+    statusElement.title = `${settings.nasEndpoint}\n/api/health: ${reason || t('status.disconnected')}`;
   }
 }
 
@@ -443,6 +507,9 @@ function bindJobEvents(el, jobId) {
 
 // Send to NAS
 async function sendToNAS(url, pageUrl) {
+  // Ensure we have the latest settings before sending
+  await loadSettingsFromStorage();
+
   if (!settings.nasEndpoint || !settings.apiKey) {
     alert(t('alert.configureFirst'));
     chrome.runtime.openOptionsPage();

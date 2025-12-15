@@ -1100,14 +1100,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details>
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
-### [Unreleased]
+### [1.8.0] - 2025-12-16
+
+#### Added
+- User settings for auto-detection and notifications
+- SSRF protection and client IP allowlisting in API and worker
 
 #### Changed
-- Update the Buy Me a Coffee link/username in `README.md`
+- Remove `MAX_CONCURRENT_DOWNLOADS` configuration and update related documentation
+- Update environment variables and Docker Compose settings to reflect worker configuration changes
 
-#### Planned
-- Phase 4: Integration testing & optimization
-- Phase 5: Production deployment guide & best practices
+### [1.7.0] - 2025-12-15
+
+#### Added
+- Internationalization (i18n) support for side panel and options
+
+#### Changed
+- Rename project from "Chrome2NAS M3U8 Downloader" to "WebVideo2NAS"
+- Improve video URL detection, handling, and deduplication in the background script
+
+### [1.6.0] - 2025-12-12
+
+#### Changed
+- Improve side panel UI and error handling; enhance job status display and duration formatting
+- Improve media duration handling in the download worker
+- Improve header normalization and M3U8 request handling across extension background and worker
+- Enhance downloader encryption handling and session management
+- Documentation updates (port usage/spec details) and version display updates
 
 ### [1.5.0] - 2025-12-12
 
@@ -1226,8 +1245,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**Version**: 1.5.0  
-**Last Updated**: 2025-12-12  
+**Version**: 1.8.1  
+**Last Updated**: 2025-12-16  
 **Port**: 52052 (NAS host port → API container :8000)
 
 ## Star History

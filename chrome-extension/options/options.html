@@ -9,142 +9,207 @@
 <body>
   <div class="container">
     <header>
-      <h1>🎬 WebVideo2NAS</h1>
-      <p class="subtitle">Configure your NAS connection</p>
+      <h1>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo-icon">
+          <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+          <line x1="7" y1="2" x2="7" y2="22"></line>
+          <line x1="17" y1="2" x2="17" y2="22"></line>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <line x1="2" y1="7" x2="7" y2="7"></line>
+          <line x1="2" y1="17" x2="7" y2="17"></line>
+          <line x1="17" y1="17" x2="22" y2="17"></line>
+          <line x1="17" y1="7" x2="22" y2="7"></line>
+        </svg>
+        WebVideo2NAS
+      </h1>
+      <p id="optionsSubtitle" class="subtitle">Configure your NAS connection and extension preferences</p>
     </header>
 
-    <main>
-      <div class="card">
-        <h2>NAS Configuration</h2>
+    <div class="layout-grid">
+      <!-- Main Column: Settings -->
+      <div class="main-column">
         
-        <div class="form-group">
-          <label for="nasEndpoint">
-            NAS Endpoint URL
-            <span class="required">*</span>
-          </label>
-          <input 
-            type="text" 
-            id="nasEndpoint" 
-            placeholder="http://192.168.1.100:52052"
-            autocomplete="off"
-          >
-          <p class="help-text">
-            Format: <code>http://YOUR_NAS_IP:PORT</code><br>
-            Example: <code>http://192.168.50.181:52052</code>
-          </p>
-        </div>
-
-        <div class="form-group">
-          <label for="apiKey">
-            API Key
-            <span class="required">*</span>
-          </label>
-          <input 
-            type="password" 
-            id="apiKey" 
-            placeholder="Enter your API key"
-            autocomplete="off"
-          >
-          <p class="help-text">
-            Find this in your NAS <code>.env</code> file
-          </p>
-        </div>
-
-        <div class="form-actions">
-          <button id="testBtn" class="btn-secondary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.35-4.35"/>
+        <!-- NAS Config Card -->
+        <div class="card">
+          <h2 id="nasConfigTitle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 17l6-6-6-6"/>
+              <path d="M12 19h8"/>
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
             </svg>
-            Test Connection
-          </button>
-          <button id="saveBtn" class="btn-primary">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
+            NAS Configuration
+          </h2>
+          
+          <div class="form-group">
+            <label for="nasEndpoint">
+              <span id="nasEndpointLabel">NAS Endpoint URL</span>
+              <span class="required">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="nasEndpoint" 
+              placeholder="http://192.168.1.100:52052"
+              autocomplete="off"
+            >
+            <p id="nasEndpointHelp" class="help-text">
+              Format: <code>http://YOUR_NAS_IP:PORT</code><br>
+              Example: <code>http://192.168.50.181:52052</code>
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="apiKey">
+              <span id="apiKeyLabel">API Key</span>
+              <span class="required">*</span>
+            </label>
+            <input 
+              type="password" 
+              id="apiKey" 
+              placeholder="Enter your API key"
+              autocomplete="off"
+            >
+            <p id="apiKeyHelp" class="help-text">
+              Find this in your NAS <code>.env</code> file
+            </p>
+          </div>
+
+          <div class="form-actions">
+            <button id="testBtn" class="btn-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+              </svg>
+              <span id="testBtnText">Test Connection</span>
+            </button>
+            <button id="saveBtn" class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              <span id="saveBtnText">Save Settings</span>
+            </button>
+          </div>
+
+          <div id="statusMessage" class="status-message" style="display: none;"></div>
+        </div>
+
+        <!-- Preferences Card -->
+        <div class="card">
+          <h2 id="downloadPreferencesTitle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
-            Save Settings
-          </button>
-        </div>
+            Preferences
+          </h2>
 
-        <div id="statusMessage" class="status-message" style="display: none;"></div>
-      </div>
-
-      <div class="card">
-        <h2>Download Preferences</h2>
-
-        <div class="form-group">
-          <label for="uiLanguage">Side Panel language</label>
-          <select id="uiLanguage">
-            <option value="">Auto (browser language)</option>
-            <option value="zh-TW">中文（繁體）</option>
-            <option value="zh-CN">中文（简体）</option>
-            <option value="en">English</option>
-            <option value="ja">日本語</option>
-            <option value="ko">한국어</option>
-            <option value="fr">Français</option>
-            <option value="es">Español</option>
-            <option value="pt">Português</option>
-          </select>
-          <p class="help-text">Applies to the Side Panel UI.</p>
-        </div>
-        
-        <div class="form-group">
-          <label>
+          <div class="form-group">
+            <label id="uiLanguageLabel" for="uiLanguage">Side Panel language</label>
+            <select id="uiLanguage">
+              <option value="">Auto (browser language)</option>
+              <option value="zh-TW">中文（繁體）</option>
+              <option value="zh-CN">中文（简体）</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="pt">Português</option>
+            </select>
+            <p id="uiLanguageHelp" class="help-text">Applies to the Side Panel UI.</p>
+          </div>
+          
+          <div class="form-group checkbox-group">
             <input type="checkbox" id="autoDetect" checked>
-            Auto-detect video URLs
-          </label>
-          <p class="help-text">
-            Automatically detect M3U8 and MP4 URLs when browsing
-          </p>
-        </div>
+            <div class="checkbox-content">
+              <label for="autoDetect" id="autoDetectLabel">Auto-detect video URLs</label>
+              <p id="autoDetectHelp" class="help-text">
+                Automatically detect M3U8 and MP4 URLs when browsing
+              </p>
+            </div>
+          </div>
 
-        <div class="form-group">
-          <label>
+          <div class="form-group checkbox-group">
             <input type="checkbox" id="showNotifications" checked>
-            Show notifications
-          </label>
-          <p class="help-text">
-            Show notifications when download is submitted
-          </p>
+            <div class="checkbox-content">
+              <label for="showNotifications" id="showNotificationsLabel">Show notifications</label>
+              <p id="showNotificationsHelp" class="help-text">
+                Show notifications when download is submitted
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <h2>About</h2>
-        <p><strong>Version:</strong> <span id="extVersion">-</span></p>
-        <p><strong>Author:</strong> WebVideo2NAS Team</p>
-        <p class="help-text">
-          This extension allows you to send web videos (M3U8 streams, MP4 files) directly to your NAS for download.
-        </p>
+      <!-- Sidebar: Info & Help -->
+      <div class="sidebar-column">
+        <div class="card">
+          <h2 id="aboutTitle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            About
+          </h2>
+          
+          <div class="info-meta">
+            <p>
+              <strong id="aboutVersionLabel">Version:</strong>
+              <span id="extVersion">-</span>
+            </p>
+            <p>
+              <strong id="aboutAuthorLabel">Author:</strong>
+              <span id="aboutAuthorValue">WebVideo2NAS Team</span>
+            </p>
+          </div>
+
+          <p id="aboutDescription" class="help-text" style="margin-top: 12px; margin-bottom: 20px;">
+            This extension allows you to send web videos (M3U8 streams, MP4 files) directly to your NAS for download.
+          </p>
+          
+          <div class="info-item">
+            <h3 id="howToUseTitle">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+              </svg>
+              How to use
+            </h3>
+            <ol>
+              <li><span id="howToUseStep1">Configure NAS endpoint</span></li>
+              <li><span id="howToUseStep2">Browse video website</span></li>
+              <li><span id="howToUseStep3">URLs detected automatically</span></li>
+              <li><span id="howToUseStep4">Open extension icon</span></li>
+              <li><span id="howToUseStep5">Click "Send to NAS"</span></li>
+            </ol>
+          </div>
+
+          <div class="info-item" style="margin-top: 20px; padding-top: 20px; border-top: 1px dashed var(--border);">
+            <h3 id="needHelpTitle">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+              </svg>
+              Troubleshooting
+            </h3>
+            <p id="needHelpBody" class="help-text">
+              • Check NAS accessibility<br>
+              • Verify API port (52052)<br>
+              • Check API Key matches .env<br>
+              • Check Firewall
+            </p>
+          </div>
+        </div>
         
-        <div class="info-box">
-          <h3>📖 How to use:</h3>
-          <ol>
-            <li>Configure your NAS endpoint and API key above</li>
-            <li>Browse to a video streaming website</li>
-            <li>Video URLs (M3U8, MP4) will be detected automatically</li>
-            <li>Click the extension icon to see detected URLs</li>
-            <li>Click "Send to NAS" to start downloading</li>
-          </ol>
-        </div>
-
-        <div class="info-box">
-          <h3>🔧 Need help?</h3>
-          <p>
-            • Check your NAS is accessible from this computer<br>
-            • Verify API port is correct (default: 52052; maps to API container :8000)<br>
-            • Ensure API key matches your NAS configuration<br>
-            • Check firewall settings on your NAS
-          </p>
-        </div>
+        <footer>
+          <p id="footerText">WebVideo2NAS © 2025</p>
+        </footer>
       </div>
-    </main>
-
-    <footer>
-      <p>WebVideo2NAS © 2025</p>
-    </footer>
+    </div>
   </div>
 
   <script src="../i18n.js"></script>

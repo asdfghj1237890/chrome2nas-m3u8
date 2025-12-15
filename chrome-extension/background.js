@@ -8,6 +8,26 @@ let currentTabUrlKeys = {};
 // Store captured request headers for m3u8 URLs
 let capturedHeaders = {};
 
+// User settings
+let userSettings = {
+  autoDetect: true,
+  showNotifications: true
+};
+
+// Load settings on startup
+chrome.storage.sync.get(['autoDetect', 'showNotifications'], (result) => {
+  if (result.autoDetect !== undefined) userSettings.autoDetect = result.autoDetect;
+  if (result.showNotifications !== undefined) userSettings.showNotifications = result.showNotifications;
+});
+
+// Listen for settings changes
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'sync') {
+    if (changes.autoDetect !== undefined) userSettings.autoDetect = changes.autoDetect.newValue;
+    if (changes.showNotifications !== undefined) userSettings.showNotifications = changes.showNotifications.newValue;
+  }
+});
+
 function isCandidateVideoUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return false;
 
@@ -41,6 +61,8 @@ function isCandidateVideoUrl(rawUrl) {
 // Listen for web requests to detect video URLs (m3u8, mp4)
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
+    if (!userSettings.autoDetect) return;
+
     if (isCandidateVideoUrl(details.url)) {
       console.log('Detected video URL:', details.url);
       
@@ -454,10 +476,12 @@ async function sendToNAS(url, pageTitle, pageUrl) {
     console.log('Download submitted:', result);
     
     // Show success notification
-    showNotification(
-      'Download Submitted',
-      `"${title}" has been sent to NAS\nJob ID: ${result.id.substring(0, 8)}...`
-    );
+    if (userSettings.showNotifications) {
+      showNotification(
+        'Download Submitted',
+        `"${title}" has been sent to NAS\nJob ID: ${result.id.substring(0, 8)}...`
+      );
+    }
     
     // Store job info
     storeJob(result);

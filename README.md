@@ -1012,16 +1012,22 @@ async function detectM3u8Urls(details) {
 ### Project Structure
 
 ```
-webvideo2nas/
-├── chrome-extension/     # Chrome extension source
-│   ├── background.js     # Background service worker
-│   ├── popup/           # Extension popup UI
-│   └── options/         # Extension options page
-├── m3u8-downloader/     # NAS downloader
-│   └── docker/          # Docker services
-│       ├── api/         # FastAPI service
-│       └── worker/      # Download worker
-└── docs/               # Additional documentation
+WebVideo2NAS/
+├── chrome-extension/      # Chrome extension source
+│   ├── background.js      # Background service worker
+│   ├── sidepanel.*        # Extension side panel UI
+│   ├── options/           # Extension options page
+│   ├── icons/             # Extension icons
+│   └── manifest.json      # Extension manifest
+├── video-downloader/      # NAS downloader
+│   └── docker/            # Docker services
+│       ├── api/           # FastAPI service
+│       ├── worker/        # Download worker
+│       ├── docker-compose.yml
+│       ├── docker-compose.synology.yml
+│       └── init-db.sql
+├── docs/                  # Architecture/specs/docs
+└── pics/                  # Diagrams
 ```
 
 ### What to Contribute
@@ -1101,6 +1107,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
 ### [1.8.2] - 2025-12-16
+
+#### Added
+- Add `db_cleanup` service to prune finished jobs (keep latest 100) on an interval via `CLEANUP_INTERVAL_SECONDS`
+
+#### Changed
+- Align Docker Compose names and database to `video_*` / `video_db` for both standard and Synology deployments
+
+#### Docs
+- Update Project Structure tree to match repository layout
+- Document `CLEANUP_INTERVAL_SECONDS` in `.env.example`
 
 #### Fixed
 - Side panel now picks up updated NAS settings without getting stuck, and shows a more specific connection error reason

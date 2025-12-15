@@ -1,4 +1,4 @@
-name: m3u8-downloader
+name: video-downloader
 
 version: '3.8'
 
@@ -9,17 +9,17 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: m3u8_db
+    container_name: video_db
     restart: unless-stopped
     env_file:
       - .env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
-      POSTGRES_DB: m3u8_db
+      POSTGRES_DB: video_db
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - /volume1/docker/m3u8-downloader/db_data:/var/lib/postgresql/data
+      - /volume1/docker/video-downloader/db_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     #ports:
     #  - "5432:5432"
@@ -29,17 +29,17 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - m3u8_network
+      - video_network
     user: "1026:100"  # Synology user:group (adjust as needed)
 
   # Redis Queue
   redis:
     image: redis:7-alpine
-    container_name: m3u8_redis
+    container_name: video_redis
     restart: unless-stopped
     command: redis-server --appendonly yes --save 60 1
     volumes:
-      - /volume1/docker/m3u8-downloader/redis_data:/data
+      - /volume1/docker/video-downloader/redis_data:/data
     #ports:
     #  - "6379:6379"
     healthcheck:
@@ -48,28 +48,28 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - m3u8_network
+      - video_network
 
   # API Gateway (FastAPI)
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: m3u8_api
+    container_name: video_api
     restart: unless-stopped
     env_file:
       - .env
     environment:
       - API_KEY=${API_KEY:-change-this-key}
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-10}
       - STORAGE_PATH=/downloads
     volumes:
-      - /volume1/nsfw_video/m3u8-downloader/downloads:/downloads
-      - /volume1/docker/m3u8-downloader/logs:/logs
+      - /volume1/nsfw_video/video-downloader/downloads:/downloads
+      - /volume1/docker/video-downloader/logs:/logs
     ports:
       - "52052:8000"
     depends_on:
@@ -84,7 +84,7 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - m3u8_network
+      - video_network
     user: "1026:100"  # Match your Synology user
 
   # Download Worker 1
@@ -92,28 +92,29 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    container_name: m3u8_worker_1
+    container_name: video_worker_1
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-2}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
       - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
       - STORAGE_PATH=/downloads
     volumes:
-      - /volume1/nsfw_video/m3u8-downloader/downloads:/downloads
-      - /volume1/docker/m3u8-downloader/logs:/logs
+      - /volume1/nsfw_video/video-downloader/downloads:/downloads
+      - /volume1/docker/video-downloader/logs:/logs
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - m3u8_network
+      - video_network
     user: "1026:100"  # Match your Synology user
 
   # Download Worker 2
@@ -121,32 +122,66 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    container_name: m3u8_worker_2
+    container_name: video_worker_2
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-2}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
       - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
       - STORAGE_PATH=/downloads
     volumes:
-      - /volume1/nsfw_video/m3u8-downloader/downloads:/downloads
-      - /volume1/docker/m3u8-downloader/logs:/logs
+      - /volume1/nsfw_video/video-downloader/downloads:/downloads
+      - /volume1/docker/video-downloader/logs:/logs
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - m3u8_network
+      - video_network
     user: "1026:100"  # Match your Synology user
 
+  # Periodic DB cleanup: keep latest 100 finished jobs
+  db_cleanup:
+    image: postgres:15-alpine
+    container_name: video_db_cleanup
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: |
+      sh -c '
+        set -e
+        while true; do
+          echo "[db_cleanup] pruning finished jobs (keep latest 100)..."
+          PGPASSWORD="${DB_PASSWORD:-postgres_password}" psql -h db -U postgres -d video_db -v ON_ERROR_STOP=1 -c "
+            WITH keep AS (
+              SELECT id
+              FROM jobs
+              WHERE status IN ('completed', 'failed')
+              ORDER BY created_at DESC
+              LIMIT 100
+            )
+            DELETE FROM jobs
+            WHERE status IN ('completed', 'failed')
+              AND id NOT IN (SELECT id FROM keep);
+          "
+          sleep "${CLEANUP_INTERVAL_SECONDS:-3600}"
+        done
+      '
+    networks:
+      - video_network
+
 networks:
-  m3u8_network:
+  video_network:
     driver: bridge
 
 # Note: Synology manages volumes through host paths

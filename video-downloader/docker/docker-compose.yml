@@ -4,14 +4,14 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
-    container_name: m3u8_db
+    container_name: video_db
     restart: unless-stopped
     env_file:
       - .env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_password}
-      POSTGRES_DB: m3u8_db
+      POSTGRES_DB: video_db
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -23,12 +23,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - m3u8_network
+      - video_network
 
   # Redis Queue
   redis:
     image: redis:7-alpine
-    container_name: m3u8_redis
+    container_name: video_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -41,20 +41,20 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - m3u8_network
+      - video_network
 
   # API Gateway (FastAPI)
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: m3u8_api
+    container_name: video_api
     restart: unless-stopped
     env_file:
       - .env
     environment:
       - API_KEY=${API_KEY:-change-this-key}
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
@@ -75,22 +75,23 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - m3u8_network
+      - video_network
 
   # Download Worker 1
   worker:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    container_name: m3u8_worker_1
+    container_name: video_worker_1
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-2}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
       - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
     volumes:
@@ -102,22 +103,23 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - m3u8_network
+      - video_network
 
   # Download Worker 2
   worker2:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    container_name: m3u8_worker_2
+    container_name: video_worker_2
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/m3u8_db
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-postgres_password}@db:5432/video_db
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-2}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
       - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
       - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
     volumes:
@@ -129,7 +131,40 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - m3u8_network
+      - video_network
+
+  # Periodic DB cleanup: keep latest 100 finished jobs
+  db_cleanup:
+    image: postgres:15-alpine
+    container_name: video_db_cleanup
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: |
+      sh -c '
+        set -e
+        while true; do
+          echo "[db_cleanup] pruning finished jobs (keep latest 100)..."
+          PGPASSWORD="${DB_PASSWORD:-postgres_password}" psql -h db -U postgres -d video_db -v ON_ERROR_STOP=1 -c "
+            WITH keep AS (
+              SELECT id
+              FROM jobs
+              WHERE status IN ('completed', 'failed')
+              ORDER BY created_at DESC
+              LIMIT 100
+            )
+            DELETE FROM jobs
+            WHERE status IN ('completed', 'failed')
+              AND id NOT IN (SELECT id FROM keep);
+          "
+          sleep "${CLEANUP_INTERVAL_SECONDS:-3600}"
+        done
+      '
+    networks:
+      - video_network
 
 volumes:
   db_data:
@@ -138,6 +173,6 @@ volumes:
     driver: local
 
 networks:
-  m3u8_network:
+  video_network:
     driver: bridge
 

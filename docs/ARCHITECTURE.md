@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides detailed architecture diagrams and explanations for the Chrome2NAS M3U8 Downloader system.
+This document provides detailed architecture diagrams and explanations for the WebVideo2NAS system.
 
 ---
 
@@ -23,8 +23,8 @@ This document provides detailed architecture diagrams and explanations for the C
 │  │                         │ User browses                    │  │
 │  │                         ↓                                 │  │
 │  │  ┌─────────────────────────────────────────────────┐     │  │
-│  │  │  Chrome2NAS Extension                           │     │  │
-│  │  │  • Detects m3u8 URLs                           │     │  │
+│  │  │  WebVideo2NAS Extension                         │     │  │
+│  │  │  • Detects video URLs (m3u8, mp4)               │     │  │
 │  │  │  • Displays popup UI                           │     │  │
 │  │  │  • Sends to NAS API                            │     │  │
 │  │  └─────────────────────────────────────────────────┘     │  │

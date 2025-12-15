@@ -1,4 +1,4 @@
--- Chrome2NAS M3U8 Downloader Database Schema
+-- WebVideo2NAS Database Schema
 -- Initialize database tables
 
 -- Jobs table: Main download job tracking

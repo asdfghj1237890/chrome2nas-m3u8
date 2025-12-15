@@ -1,6 +1,6 @@
 """
-Chrome2NAS M3U8 Downloader - Download Worker
-Worker process that downloads and processes m3u8 streams
+WebVideo2NAS - Download Worker
+Worker process that downloads and processes web videos (m3u8, mp4)
 """
 
 import os
@@ -925,7 +925,7 @@ class DownloadWorker:
 def main():
     """Main entry point"""
     logger.info("="*50)
-    logger.info("Chrome2NAS M3U8 Downloader Worker")
+    logger.info("WebVideo2NAS Worker")
     logger.info("Version: 1.5.0")
     logger.info("="*50)
     

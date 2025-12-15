@@ -1,13 +1,13 @@
-# Chrome-to-NAS M3U8 Downloader - Technical Specification
+# WebVideo2NAS - Technical Specification
 
 ## 1. Executive Summary
 
-This document specifies a complete system for capturing m3u8 video stream URLs from Chrome browser and downloading them via a Docker container running on a NAS (Network Attached Storage) device.
+This document specifies a complete system for capturing web video URLs (m3u8 streams and mp4 files) from Chrome and downloading them via a Docker container running on a NAS (Network Attached Storage) device.
 
 ### 1.1 System Goals
-- Enable one-click m3u8 URL capture from Chrome
+- Enable one-click web video URL capture from Chrome (m3u8, mp4)
 - Seamless transmission to NAS Docker environment
-- Automated m3u8 stream download and conversion
+- Automated video download and conversion
 - Centralized storage on NAS
 - Status tracking and notification
 
@@ -50,10 +50,10 @@ This document specifies a complete system for capturing m3u8 video stream URLs f
 ### 2.2 Component Details
 
 #### A. Chrome Extension
-- **Purpose**: Detect and capture m3u8 URLs from browser activity
+- **Purpose**: Detect and capture video URLs from browser activity
 - **Technology**: Manifest V3 Chrome Extension
 - **Functionality**:
-  - Monitor network requests for `.m3u8` files
+  - Monitor network requests for `.m3u8` and `.mp4`
   - Provide context menu option "Send to NAS"
   - Display badge notification when m3u8 detected
   - Configure NAS endpoint (IP/hostname + port)
@@ -100,7 +100,7 @@ This document specifies a complete system for capturing m3u8 video stream URLs f
 ```json
 {
   "manifest_version": 3,
-  "name": "Chrome2NAS M3U8 Downloader",
+  "name": "WebVideo2NAS",
   "version": "1.5.0",
   "description": "Send m3u8 and mp4 videos to your NAS for download",
   "permissions": [
@@ -551,7 +551,7 @@ curl -X GET https://nas-ip:52052/api/jobs/12345 \
 ## Appendix B: Directory Structure
 
 ```
-chrome2nas-m3u8/
+webvideo2nas/
 ├── chrome-extension/       # Chrome extension
 │   ├── manifest.json
 │   ├── background.js

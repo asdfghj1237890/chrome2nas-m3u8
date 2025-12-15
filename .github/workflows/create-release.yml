@@ -45,19 +45,19 @@ jobs:
       - name: 'Create chrome-extension package'
         run: |
           cd chrome-extension
-          zip -r ../chrome2nas-m3u8-chrome-extension.zip .
+          zip -r ../WebVideo2NAS-chrome-extension.zip .
 
       - name: 'Create docker package'
         run: |
           cd m3u8-downloader
-          zip -r ../chrome2nas-m3u8-downloader-docker.zip .
+          zip -r ../WebVideo2NAS-downloader-docker.zip .
 
       - name: 'Create Release'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            chrome2nas-m3u8-chrome-extension.zip
-            chrome2nas-m3u8-downloader-docker.zip
+            WebVideo2NAS-chrome-extension.zip
+            WebVideo2NAS-downloader-docker.zip
           body: |
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}

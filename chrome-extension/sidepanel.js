@@ -1,4 +1,4 @@
-// Sidepanel Script for Chrome2NAS Video Downloader
+// Sidepanel Script for WebVideo2NAS
 
 let settings = {};
 let detectedUrls = [];
@@ -39,6 +39,11 @@ function setupEventListeners() {
         }
       });
     }
+  });
+
+  // Refresh immediately when the user switches tabs
+  chrome.tabs.onActivated.addListener(() => {
+    loadDetectedUrls();
   });
 
   // Listen for storage changes to auto-update when new URLs are detected

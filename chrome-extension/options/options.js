@@ -1,4 +1,4 @@
-// Options Page Script for Chrome2NAS Video Downloader
+// Options Page Script for WebVideo2NAS
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Display extension version (keep in sync with manifest.json)

@@ -1,6 +1,6 @@
 """
-Chrome2NAS Video Downloader - API Gateway
-FastAPI application for managing download jobs (M3U8 and MP4)
+WebVideo2NAS - API Gateway
+FastAPI application for managing web video download jobs (M3U8 and MP4)
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI
 app = FastAPI(
-    title="Chrome2NAS Video Downloader API",
-    description="API for managing video downloads (M3U8 and MP4)",
+    title="WebVideo2NAS API",
+    description="API for managing web video downloads (M3U8 and MP4)",
     version="1.5.0"
 )
 
@@ -122,7 +122,7 @@ def verify_api_key(authorization: Optional[str] = Header(None)):
 async def root():
     """Root endpoint"""
     return {
-        "name": "Chrome2NAS M3U8 Downloader API",
+        "name": "WebVideo2NAS API",
         "version": "1.5.0",
         "status": "running"
     }

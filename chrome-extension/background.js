@@ -538,4 +538,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 });
 
-console.log('Chrome2NAS Video Downloader background service worker loaded');
+console.log('WebVideo2NAS background service worker loaded');

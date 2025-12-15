@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Chrome2NAS M3U8 Downloader",
+  "name": "WebVideo2NAS",
   "version": "1.5.0",
-  "description": "Send m3u8 and mp4 videos to your NAS for download",
+  "description": "Send web videos (m3u8, mp4) to your NAS for download",
   "permissions": [
     "storage",
     "contextMenus",

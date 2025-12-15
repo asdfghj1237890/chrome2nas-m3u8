@@ -1,12 +1,14 @@
-# Chrome2NAS M3U8 Downloader
+# WebVideo2NAS
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](https://docs.docker.com/compose/)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-red.svg)](https://developer.chrome.com/docs/extensions/)
-[![Release](https://img.shields.io/github/v/release/asdfghj1237890/chrome2nas-m3u8)](https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest)
+[![Release](https://img.shields.io/github/v/release/asdfghj1237890/WebVideo2NAS)](https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest)
 
-> Seamlessly capture M3U8 and MP4 video streams from Chrome and download them to your NAS
+> Seamlessly capture web video URLs (M3U8 and MP4) from Chrome and download them to your NAS
+
+> **⚠️ Disclaimer**: This project does **not** guarantee every video can be downloaded. Some sites use DRM, expiring URLs, anti-hotlinking, IP restrictions, or change their delivery logic at any time.
 
 ## Table of Contents
 
@@ -98,7 +100,7 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 ## Project Structure
 
 ```
-chrome2nas-m3u8/
+webvideo2nas/
 ├── chrome-extension/  # Chrome extension source
 ├── docs/              # Documentation
 ├── m3u8-downloader/   # NAS downloader (Docker stack)
@@ -147,12 +149,12 @@ This section contains the full installation guide.
 ##### 1. Download and Extract Release
 ```bash
 # Download the latest release
-wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
+wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
 
 # Create docker directory and extract
 mkdir -p docker
 cd docker
-unzip ../chrome2nas-m3u8-downloader-docker.zip
+unzip ../WebVideo2NAS-downloader-docker.zip
 
 # Verify directory structure
 ls -la m3u8-downloader/
@@ -252,7 +254,7 @@ sudo chown -R 1026:100 /volume1/xxxxx/downloads
 ##### Step 4: Download and Extract Release
 
 **Option A: Using File Station (Recommended)**
-1. Download `chrome2nas-m3u8-downloader-docker.zip` from GitHub Releases
+1. Download `WebVideo2NAS-downloader-docker.zip` from GitHub Releases
 2. Upload the ZIP file to `/volume1/docker/` using File Station
 3. Extract the ZIP file in `/volume1/docker/`
 4. Verify the structure:
@@ -267,9 +269,9 @@ sudo chown -R 1026:100 /volume1/xxxxx/downloads
 **Option B: Using SSH**
 ```bash
 cd /volume1/docker
-wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
-unzip chrome2nas-m3u8-downloader-docker.zip
-rm chrome2nas-m3u8-downloader-docker.zip
+wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
+unzip WebVideo2NAS-downloader-docker.zip
+rm WebVideo2NAS-downloader-docker.zip
 
 # Set proper permissions
 sudo chown -R 1026:100 /volume1/docker/m3u8-downloader
@@ -350,10 +352,10 @@ sudo apt-get update
 sudo apt-get install docker-compose-plugin
 
 # Download and extract release
-wget https://github.com/asdfghj1237890/chrome2nas-m3u8/releases/latest/download/chrome2nas-m3u8-downloader-docker.zip
+wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
 mkdir -p docker
 cd docker
-unzip ../chrome2nas-m3u8-downloader-docker.zip
+unzip ../WebVideo2NAS-downloader-docker.zip
 
 # Navigate to docker configuration
 cd m3u8-downloader/docker
@@ -739,7 +741,7 @@ Currently, the following versions are being supported with security updates:
 
 ### Reporting a Vulnerability
 
-If you discover a security vulnerability within Chrome2NAS M3U8 Downloader, please follow these steps:
+If you discover a security vulnerability within WebVideo2NAS, please follow these steps:
 
 #### Do NOT
 
@@ -923,8 +925,8 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 #### 1. Fork and Clone
 ```bash
-git clone https://github.com/yourusername/chrome2nas-m3u8.git
-cd chrome2nas-m3u8
+git clone https://github.com/yourusername/webvideo2nas.git
+cd webvideo2nas
 ```
 
 #### 2. Create a Branch
@@ -1010,7 +1012,7 @@ async function detectM3u8Urls(details) {
 ### Project Structure
 
 ```
-chrome2nas-m3u8/
+webvideo2nas/
 ├── chrome-extension/     # Chrome extension source
 │   ├── background.js     # Background service worker
 │   ├── popup/           # Extension popup UI
@@ -1172,8 +1174,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Context menu integration
 - Badge notifications for detected URLs
 
-#### Added - Phase 2 Complete: M3U8 Downloader
-- Phase 2 complete: Worker implementation with M3U8 parsing
+#### Added - Phase 2 Complete: Video Downloader
+- Phase 2 complete: Worker implementation with playlist parsing (M3U8) and direct downloads (MP4)
 - FFmpeg integration for video merging
 - Multi-threaded segment downloader
 - Retry mechanism with exponential backoff
@@ -1217,8 +1219,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Support
 
-- 🐛 **Issues**: [GitHub Issues](https://github.com/asdfghj1237890/chrome2nas-m3u8/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/asdfghj1237890/chrome2nas-m3u8/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/asdfghj1237890/WebVideo2NAS/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/asdfghj1237890/WebVideo2NAS/discussions)
 - 📧 **Security**: See [Reporting a Vulnerability](#reporting-a-vulnerability)
 - ☕ **Buy me a coffee**: https://buymeacoffee.com/asdfghj1237890
 

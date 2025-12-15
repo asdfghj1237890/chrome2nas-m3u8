@@ -1,6 +1,6 @@
 # Technical Documentation
 
-This directory contains the technical documentation for Chrome2NAS M3U8 Downloader.
+This directory contains the technical documentation for WebVideo2NAS.
 
 ## 📚 Available Documents
 

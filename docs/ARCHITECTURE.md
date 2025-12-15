@@ -559,7 +559,6 @@ The system deploys **2 independent download workers** by default to maximize thr
 
 **Per-Worker Configuration:**
 ```
-MAX_CONCURRENT_DOWNLOADS=3   # Jobs processed simultaneously per worker
 MAX_DOWNLOAD_WORKERS=10      # Threads per video for segment downloading
 ```
 

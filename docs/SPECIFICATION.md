@@ -180,7 +180,6 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
-      - MAX_CONCURRENT_DOWNLOADS=3
       - MAX_DOWNLOAD_WORKERS=10
     volumes:
       - /nas/downloads:/downloads
@@ -194,7 +193,6 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://postgres:password@db:5432/m3u8_db
-      - MAX_CONCURRENT_DOWNLOADS=3
       - MAX_DOWNLOAD_WORKERS=10
     volumes:
       - /nas/downloads:/downloads
@@ -401,7 +399,6 @@ API_KEY=your-secure-api-key-here
 DB_PASSWORD=your-secure-db-password-here
 # Storage is mounted to /downloads inside containers
 STORAGE_PATH=/downloads
-MAX_CONCURRENT_DOWNLOADS=3
 MAX_DOWNLOAD_WORKERS=10
 MAX_RETRY_ATTEMPTS=3
 FFMPEG_THREADS=4

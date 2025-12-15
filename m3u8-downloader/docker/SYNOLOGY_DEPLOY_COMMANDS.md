@@ -22,7 +22,6 @@ cd /volume1/docker/m3u8-downloader/docker
 cat > .env << 'EOF'
 DB_PASSWORD=ChangeThisPassword123!
 API_KEY=change-this-to-a-very-long-secure-key-minimum-32-chars
-MAX_CONCURRENT_DOWNLOADS=3
 MAX_DOWNLOAD_WORKERS=10
 MAX_RETRY_ATTEMPTS=3
 FFMPEG_THREADS=4
@@ -318,7 +317,6 @@ docker-compose -f docker-compose.synology.yml restart
 vi /volume1/docker/m3u8-downloader/docker/.env
 
 # Change the following values:
-# MAX_CONCURRENT_DOWNLOADS=5  # Number of concurrent downloads
 # MAX_DOWNLOAD_WORKERS=15      # Number of threads per video
 
 # Restart Worker

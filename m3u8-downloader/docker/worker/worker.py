@@ -16,12 +16,15 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from urllib.parse import urlparse
 import signal
+import ipaddress
+import socket
 
 # Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/m3u8_db")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 MAX_RETRY_ATTEMPTS = int(os.getenv("MAX_RETRY_ATTEMPTS", "3"))
+SSRF_GUARD_ENABLED = os.getenv("SSRF_GUARD", "false").strip().lower() in ("1", "true", "yes", "y", "on")
 
 # Setup logging
 logging.basicConfig(
@@ -47,6 +50,41 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
+
+def _resolve_host_ips(hostname: str) -> list[ipaddress._BaseAddress]:
+    infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    ips: list[ipaddress._BaseAddress] = []
+    for info in infos:
+        sockaddr = info[4]
+        ip_str = sockaddr[0]
+        ips.append(ipaddress.ip_address(ip_str))
+    return ips
+
+
+def _is_ip_public(ip: ipaddress._BaseAddress) -> bool:
+    if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+        return False
+    return True
+
+
+def _enforce_ssrf_guard(url: str) -> None:
+    if not SSRF_GUARD_ENABLED:
+        return
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise Exception("Invalid URL host")
+    if hostname.lower() in ("localhost",):
+        raise Exception("URL host not allowed")
+    try:
+        ips = _resolve_host_ips(hostname)
+    except Exception:
+        raise Exception("URL host could not be resolved")
+    if not ips:
+        raise Exception("URL host could not be resolved")
+    for ip in ips:
+        if not _is_ip_public(ip):
+            raise Exception("URL host not allowed")
 
 
 class DownloadWorker:
@@ -235,6 +273,8 @@ class DownloadWorker:
         from ssl_adapter import create_legacy_session
         
         try:
+            _enforce_ssrf_guard(job["url"])
+
             # Update status to downloading
             self.update_job_status(job_id, "downloading", progress=0)
             logger.info(f"Starting direct download: {job['url']}")
@@ -587,6 +627,8 @@ class DownloadWorker:
         temp_dir = None
         
         try:
+            _enforce_ssrf_guard(job["url"])
+
             # Update status to downloading
             self.update_job_status(job_id, "downloading", progress=0)
             logger.info(f"Starting m3u8 download: {job['url']}")

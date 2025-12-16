@@ -1110,6 +1110,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details>
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
+### [1.8.5] - 2025-12-16
+
+#### Added
+- Add GitHub Actions CI workflow for Python unit tests (API + worker via `uv`), Chrome extension unit tests (Vitest), and an API smoke test using Docker Compose
+- Add unit tests for Chrome extension helpers and downloader worker/API edge cases
+
+#### Changed
+- Exclude tests, `node_modules`, and Python caches from release zip artifacts
+
+#### Fixed
+- Fix side panel quality extraction so adjacent quality markers (e.g. `720p_1080p`) are detected reliably
+- Make M3U8 parsing more robust: handle `Accept-Encoding: br` case-insensitively and ignore invalid AES-128 IV values
+
+#### Docs
+- Update API specification to remove `/api/auth/validate` endpoint
+
 ### [1.8.4] - 2025-12-16
 
 #### Changed
@@ -1287,7 +1303,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**Version**: 1.8.4  
+**Version**: 1.8.5  
 **Last Updated**: 2025-12-16  
 **Port**: 52052 (NAS host port → API container :8000)
 

@@ -6,6 +6,8 @@
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-red.svg)](https://developer.chrome.com/docs/extensions/)
 [![Release](https://img.shields.io/github/v/release/asdfghj1237890/WebVideo2NAS)](https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest)
 
+**Languages**: **English** (`README.md`) | **繁體中文** (`README.zh-TW.md`)
+
 > Seamlessly capture web video URLs (M3U8 and MP4) from Chrome and download them to your NAS
 
 > [!IMPORTANT]
@@ -148,163 +150,36 @@ This section contains the full installation guide.
 - Docker Compose 2.0+
 - Network connectivity between Chrome and NAS
 
-#### Quick Start
+#### Installation (Easy Mode)
+You will do 3 things:
+1. **Deploy the backend on your NAS/server** (pick Synology or Non-Synology)
+2. **Install + configure the Chrome extension**
+3. **Verify it works**
 
-##### 1. Download and Extract Release
-```bash
-# Download the latest release
-wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
+#### Step 1: Deploy backend (pick ONE)
 
-# Create docker directory and extract
-mkdir -p docker
-cd docker
-unzip ../WebVideo2NAS-downloader-docker.zip
+<details>
+<summary><strong>Synology NAS (DSM / Container Manager) — UI-first</strong></summary>
 
-# Verify directory structure
-ls -la video-downloader/
-# The release zip only contains the compose stack under `docker/`.
-# Data directories are created on first run (or you can create them manually).
-# Should show: docker/
-
-cd video-downloader/docker
-
-# Create host bind-mount directories (recommended)
-mkdir -p ../logs ../downloads/completed
-```
-
-##### 2. Configure Environment
-```bash
-# Generate secure credentials
-API_KEY=$(openssl rand -base64 32)
-DB_PASSWORD=$(openssl rand -base64 24)
-
-# Create .env file and modify the value as you want
-cat > .env << EOF
-DB_PASSWORD=${DB_PASSWORD}
-API_KEY=${API_KEY}
-MAX_DOWNLOAD_WORKERS=20
-MAX_RETRY_ATTEMPTS=3
-FFMPEG_THREADS=2
-LOG_LEVEL=INFO
-ALLOWED_ORIGINS=chrome-extension://*
-# Optional: allow CORS credentials (requires explicit origins; wildcard will be rejected)
-CORS_ALLOW_CREDENTIALS=false
-
-# DB cleanup (db_cleanup service)
-# How often to prune finished jobs (seconds). Default: 3600 (1 hour)
-#CLEANUP_INTERVAL_SECONDS=3600
-
-# Security
-# Per-client rate limit for protected endpoints (0 disables)
-RATE_LIMIT_PER_MINUTE=10
-# Restrict who can call the API (comma-separated CIDRs)
-ALLOWED_CLIENT_CIDRS=
-# Basic SSRF guard for /api/download (blocks private/loopback/link-local/reserved destinations)
-SSRF_GUARD=false
-
-# Optional (insecure): TLS verification controls for tricky servers
-# INSECURE_SKIP_TLS_VERIFY=0
-# SSL_VERIFY=1
-EOF
-
-# Save your API key for Chrome extension
-echo "Your API Key: ${API_KEY}"
-```
-
-##### 3. Deploy Services
-```bash
-# For Synology NAS
-sudo docker-compose -f docker-compose.synology.yml up -d
-
-# For standard Docker
-docker-compose up -d
-```
-
-##### 4. Verify Deployment
-```bash
-# Check health
-curl http://localhost:52052/api/health
-
-# View logs
-docker logs video_api
-docker logs video_worker_1
-```
-
-##### 6. Install Chrome Extension
-1. Open `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select `chrome-extension` folder
-5. Configure with your NAS IP and API key
-
-#### Synology NAS Setup
-
-##### Step 1: Install Docker
+##### 1. Install Container Manager
 1. Open **Package Center**
-2. Search and install **Docker** and **Container Manager**
+2. Install **Container Manager**
 
-##### Step 2: Enable SSH (Optional but Recommended)
-1. **Control Panel** → **Terminal & SNMP**
-2. Enable **SSH service**
+##### 2. Prepare folders (DSM UI)
+1. Open **File Station**
+2. Project folder (example): `/volume1/docker/video-downloader/`
+3. Downloads folder (example): `/volume1/<YOUR_SHARED_FOLDER_NAME>/downloads/completed`
+4. Ensure the account you use in Container Manager has **read/write** permissions to both folders
 
-##### Step 3: Create Directory Structure
-```bash
-# SSH into your Synology
-ssh your-username@synology-ip
-
-# Create main docker directory
-sudo mkdir -p /volume1/docker
-
-# Create download directory
-sudo mkdir -p /volume1/xxxxx/downloads/completed
-
-# Set proper permissions for download directory (adjust user:group as needed)
-sudo chown -R 1026:100 /volume1/xxxxx/downloads
-```
-
-> **⚠️ Important: Download Folder Configuration**
->
-> - **Custom Location**: The download folder path can be customized in `docker-compose.yml` (or `docker-compose.synology.yml`). Edit the volume mappings for both `api` and `worker` services:
->   ```yaml
->   volumes:
->     - /your/custom/path:/downloads  # Change this path
->   ```
-> - **Required Structure**: The download folder will contain a `completed/` subdirectory where all successfully downloaded files are stored. The system tracks job status (pending/downloading/completed/failed) in the database, not through separate folders.
-> - If you change the download location, ensure the directory exists and has proper permissions before starting the services.
-
-##### Step 4: Download and Extract Release
-
-**Option A: Using File Station (Recommended)**
+##### 3. Download & extract release (DSM UI)
 1. Download `WebVideo2NAS-downloader-docker.zip` from GitHub Releases
-2. Upload the ZIP file to `/volume1/docker/` using File Station
-3. Extract the ZIP file in `/volume1/docker/`
-4. Verify the structure:
-   ```
-   /volume1/docker/video-downloader/
-   ├── docker/          # Contains docker-compose files
-   ├── db_data/         # Database data directory (create this folder)
-   ├── logs/            # Application logs directory (create this folder)
-   └── redis_data/      # Redis data directory (create this folder)
-   ```
-   > Note: the release zip contains only `docker/`. Create the other folders as needed for Synology bind-mount paths.
+2. Upload to `/volume1/docker/` with File Station and extract it
+3. You should have: `/volume1/docker/video-downloader/docker/`
 
-**Option B: Using SSH**
+##### 4. Create `.env` (only 2 values are required)
+Create `/volume1/docker/video-downloader/docker/.env` (DSM text editor or upload from PC):
+
 ```bash
-cd /volume1/docker
-wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
-unzip WebVideo2NAS-downloader-docker.zip
-rm WebVideo2NAS-downloader-docker.zip
-
-# Set proper permissions
-sudo chown -R 1026:100 /volume1/docker/video-downloader
-```
-
-##### Step 5: Configure Environment
-```bash
-cd /volume1/docker/video-downloader/docker
-
-# Create .env file and setup the value as you want
-cat > .env << 'EOF'
 DB_PASSWORD=your_secure_password_here
 API_KEY=your_api_key_minimum_32_chars
 MAX_DOWNLOAD_WORKERS=20
@@ -313,385 +188,87 @@ FFMPEG_THREADS=2
 LOG_LEVEL=INFO
 ALLOWED_ORIGINS=chrome-extension://*
 CORS_ALLOW_CREDENTIALS=false
-
-# DB cleanup (db_cleanup service)
-# How often to prune finished jobs (seconds). Default: 3600 (1 hour)
-#CLEANUP_INTERVAL_SECONDS=3600
-
-# Security
-# Per-client rate limit for protected endpoints (0 disables)
 RATE_LIMIT_PER_MINUTE=10
-# Restrict who can call the API (comma-separated CIDRs)
 ALLOWED_CLIENT_CIDRS=
-# Basic SSRF guard for /api/download (blocks private/loopback/link-local/reserved destinations)
 SSRF_GUARD=false
-
-# Optional (insecure): TLS verification controls for tricky servers
-# INSECURE_SKIP_TLS_VERIFY=0
-# SSL_VERIFY=1
-EOF
-
-# Generate secure keys
-openssl rand -base64 32  # Use this for API_KEY
-openssl rand -base64 24  # Use this for DB_PASSWORD
-
-# Edit .env with generated keys
-sudo nano .env
 ```
 
-##### Step 6: Deploy on Synology
-**Option A: DSM UI (Container Manager → Projects import)**
-
-1. In `/volume1/docker/video-downloader/docker/`, make sure the compose file is named `docker-compose.yml` (Container Manager Projects expects this filename).
-   - If `docker-compose.yml` already exists, move it aside (e.g. rename to `docker-compose.non-synology.yml`)
-   - Rename `docker-compose.synology.yml` to `docker-compose.yml`
+##### 5. Deploy with Projects (DSM UI)
+1. In `/volume1/docker/video-downloader/docker/`, rename `docker-compose.synology.yml` → `docker-compose.yml`
 2. Open **Container Manager** → **Projects** → **Create**
-3. Select the project folder: `/volume1/docker/video-downloader/docker`
+3. Select project folder: `/volume1/docker/video-downloader/docker`
 4. Finish the wizard and start the project
 
-**Option B: SSH (docker-compose)**
+##### 6. Verify
+Open `http://YOUR_SYNOLOGY_IP:52052/api/health` → should return `{"status":"healthy"}`
 
+</details>
+
+<details>
+<summary><strong>Non-Synology / Standard Docker — command line</strong></summary>
+
+##### 1. Download & extract release
 ```bash
-cd /volume1/docker/video-downloader/docker
-
-# Start services
-sudo docker-compose -f docker-compose.synology.yml up -d
-
-# Check status
-sudo docker ps
-
-# View logs
-sudo docker logs video_api
-sudo docker logs video_worker_1
-```
-
-##### Step 7: Configure Firewall
-1. **Control Panel** → **Security** → **Firewall**
-2. Create rule to allow port 52052
-3. Source: Your local network
-
-##### Step 8: Test API
-```bash
-curl -H "Authorization: Bearer <YOUR_API_KEY>" http://YOUR_SYNOLOGY_IP:52052/api/health
-# Should return: {"status":"healthy"}
-```
-
-#### Standard Docker Setup
-
-##### For Ubuntu/Debian
-```bash
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-sudo usermod -aG docker $USER
-
-# Install Docker Compose
-sudo apt-get update
-sudo apt-get install docker-compose-plugin
-
-# Download and extract release
 wget https://github.com/asdfghj1237890/WebVideo2NAS/releases/latest/download/WebVideo2NAS-downloader-docker.zip
 mkdir -p docker
 cd docker
 unzip ../WebVideo2NAS-downloader-docker.zip
-
-# Navigate to docker configuration
 cd video-downloader/docker
+mkdir -p ../logs ../downloads/completed
+```
 
-# Deploy
+##### 2. Create `.env` (only 2 values are required)
+```bash
+API_KEY=$(openssl rand -base64 32)
+DB_PASSWORD=$(openssl rand -base64 24)
+
+cat > .env << EOF
+DB_PASSWORD=${DB_PASSWORD}
+API_KEY=${API_KEY}
+MAX_DOWNLOAD_WORKERS=20
+MAX_RETRY_ATTEMPTS=3
+FFMPEG_THREADS=2
+LOG_LEVEL=INFO
+ALLOWED_ORIGINS=chrome-extension://*
+CORS_ALLOW_CREDENTIALS=false
+RATE_LIMIT_PER_MINUTE=10
+ALLOWED_CLIENT_CIDRS=
+SSRF_GUARD=false
+EOF
+
+echo "Your API Key: ${API_KEY}"
+```
+
+##### 3. Deploy & verify
+```bash
 docker-compose up -d
-
-# Check status
-docker ps
 curl http://localhost:52052/api/health
 ```
 
-##### For Other Linux Distributions
-Similar steps - install Docker, Docker Compose, then follow Quick Start.
+</details>
 
-#### Chrome Extension Setup
-
-##### Step 1: Prepare Icons
-
-**Option A: Use Existing Icons**
-Icons should already be in `chrome-extension/icons/` (icon16.png, icon48.png, icon128.png)
-
-**Option B: Create Your Own**
-Create three PNG files:
-- `icon16.png` (16×16px)
-- `icon48.png` (48×48px)
-- `icon128.png` (128×128px)
-
-Place them in `chrome-extension/icons/`
-
-##### Step 2: Load Extension in Chrome
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable **Developer mode** (toggle in top-right corner)
+#### Step 2: Install + configure Chrome extension
+1. Open `chrome://extensions/`
+2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select the `chrome-extension` folder
-5. Extension should appear in your toolbar
-
-##### Step 3: Configure Extension
-1. Click the extension icon in Chrome toolbar
-2. Click the **⚙️ Settings** button
-3. Enter your settings:
+5. Open extension **Settings**:
    - **NAS Endpoint**: `http://YOUR_NAS_IP:52052`
-   - **API Key**: Paste from your `.env` file
-4. Click **Test Connection**
-   - Should show: "✅ Connected! Active downloads: 0, Queue: 0"
-5. Click **Save Settings**
+   - **API Key**: your `API_KEY` from `.env`
+6. Click **Test Connection** → should show connected
 
-##### Step 4: Enable Auto-Detection (Optional)
-- Check **Auto-detect M3U8 URLs** in settings
-- Extension will automatically detect video streams
+<details>
+<summary><strong>(Optional) Custom icons</strong></summary>
 
-#### Testing (Installation Guide)
+Icons should already exist in `chrome-extension/icons/` (icon16.png, icon48.png, icon128.png).
+If you want to replace them, create PNGs with those names and overwrite the files.
 
-##### Test 1: API Health Check
-```bash
-curl http://YOUR_NAS_IP:52052/api/health
-# Expected: {"status":"healthy"}
-```
+</details>
 
-##### Test 2: Submit Test Download
-```bash
-export API_KEY="your_api_key_here"
-
-curl -X POST http://YOUR_NAS_IP:52052/api/download \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-    "title": "Test Video"
-  }'
-```
-
-##### Test 3: Check Download Status
-```bash
-curl http://YOUR_NAS_IP:52052/api/jobs \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-##### Test 4: Monitor Workers
-```bash
-# View real-time logs from both workers
-docker logs -f video_worker_1
-
-# Check worker2
-docker logs -f video_worker_2
-
-# Check for completed downloads
-ls -lh /volume1/xxxxx/downloads/completed/
-```
-
-##### Test 5: Use Chrome Extension
-1. Visit a video streaming site
-2. Extension badge should show detected URLs
-3. Click extension icon
-4. Click "Send to NAS"
-5. Monitor progress in extension popup
-
-#### Troubleshooting (Installation Guide)
-
-##### Issue: Containers Won't Start
-```bash
-# Check logs
-docker-compose logs
-
-# Common solutions:
-# 1. Port conflicts
-sudo netstat -tulpn | grep -E '52052|5432|6379'
-
-# 2. Permission issues (Synology)
-sudo docker-compose -f docker-compose.synology.yml up -d
-
-# 3. Missing .env file
-ls -la .env
-```
-
-##### Issue: Extension Can't Connect
-
-**Check 1: Network Connectivity**
-```bash
-# From your computer
-ping YOUR_NAS_IP
-curl http://YOUR_NAS_IP:52052/api/health
-```
-
-**Check 2: Firewall**
-- Ensure NAS firewall allows the port
-- Check router/network firewall
-
-**Check 3: Correct Endpoint**
-- Verify IP address
-- Verify port (52052)
-- Don't forget `http://` prefix
-
-##### Issue: Downloads Fail
-```bash
-# Check worker logs
-docker logs video_worker_1
-
-# Common causes:
-# 1. Invalid M3U8 URL
-# 2. Network connectivity issues
-# 3. Disk space full
-df -h
-
-# 4. Permission issues
-ls -ld /volume1/xxxxx/downloads/
-```
-
-##### Issue: Slow Performance
-
-**Check System Resources**
-```bash
-# CPU and memory usage for all workers
-docker stats video_worker_1 video_worker_2
-
-# Adjust settings in .env (per-video parallelism)
-MAX_DOWNLOAD_WORKERS=5      # Reduce per-video threads
-FFMPEG_THREADS=2            # Reduce FFmpeg threads
-```
-
-**Consider Reducing Workers**
-If your NAS is struggling with 2 workers:
-```bash
-# Stop worker2
-docker stop video_worker_2
-
-# Or remove it from docker-compose.yml and restart
-docker-compose up -d
-```
-
-**Restart Services**
-```bash
-docker-compose restart worker worker2
-```
-
-##### Issue: Video Won't Play
-```bash
-# Check video file
-file /path/to/video.mp4
-
-# Try re-downloading with lower settings
-```
-
-#### Performance Tuning (Installation Guide)
-
-##### Understanding Worker Architecture
-The system uses **2 download workers** by default, both pulling from a shared Redis queue:
-- **Benefit**: Process up to 2 videos simultaneously (1 per worker)
-- **Requirement**: Each worker uses ~1GB RAM under load
-- **Scaling**: Add/remove workers based on your NAS capacity
-
-##### Worker Scaling Recommendations
-
-###### High-End System (8GB+ RAM, 4+ cores)
-**Keep 2 workers** or add a 3rd worker:
-```env
-MAX_DOWNLOAD_WORKERS=15
-FFMPEG_THREADS=6
-```
-
-To add worker3, edit `docker-compose.yml`:
-```yaml
-worker3:
-  build:
-    context: ./worker
-    dockerfile: Dockerfile
-  container_name: video_worker_3
-  restart: unless-stopped
-  env_file:
-    - .env
-  environment:
-    - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/video_db
-    - REDIS_URL=redis://redis:6379/0
-    - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-20}
-    - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
-    - FFMPEG_THREADS=${FFMPEG_THREADS:-2}
-  volumes:
-    - ../downloads:/downloads
-    - ../logs:/logs
-  depends_on:
-    db:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-  networks:
-    - video_network
-```
-
-Then restart:
-```bash
-docker-compose up -d
-```
-
-###### Mid-Range System (4GB RAM, 2-4 cores) - **DEFAULT**
-**Keep 2 workers** (default configuration):
-```env
-MAX_DOWNLOAD_WORKERS=20
-FFMPEG_THREADS=2
-```
-
-###### Entry-Level System (2GB RAM, 1-2 cores)
-**Reduce to 1 worker** - Remove `worker2` from docker-compose.yml:
-```bash
-# OR stop worker2:
-docker stop video_worker_2
-docker rm video_worker_2
-```
-
-Then adjust settings:
-```env
-MAX_DOWNLOAD_WORKERS=5
-FFMPEG_THREADS=2
-```
-
-##### Monitoring Worker Performance
-```bash
-# View all workers
-docker-compose logs -f worker worker2
-
-# View specific worker
-docker logs -f video_worker_1
-docker logs -f video_worker_2
-
-# Check resource usage
-docker stats video_worker_1 video_worker_2
-```
-
-#### Security Best Practices (Installation Guide)
-1. **Use Strong Credentials**
-   ```bash
-   # Generate secure keys
-   openssl rand -base64 32
-   ```
-
-2. **Enable HTTPS** (Production)
-   - Use Synology's reverse proxy with SSL
-   - Or configure a reverse proxy (Caddy, Traefik) with Let's Encrypt
-
-3. **Restrict Access**
-   - Use firewall rules
-   - Consider VPN/Tailscale for remote access
-
-4. **Regular Updates**
-   ```bash
-   git pull
-   docker-compose down
-   docker-compose build
-   docker-compose up -d
-   ```
-
-#### Next Steps (Installation Guide)
-- Read [Architecture Documentation](docs/ARCHITECTURE.md)
-- Check [API Specification](docs/SPECIFICATION.md)
-- Review [Security Policy](#security)
-- See [Contributing Guidelines](#contributing)
-
-**Installation Complete!** 🎉 Enjoy your automated M3U8 downloader!
+#### Step 3: What to do if something doesn't work
+- **Usage**: see [Usage](#usage)
+- **Troubleshooting**: see [Troubleshooting](#troubleshooting)
+- **Configuration**: see [Configuration](#configuration)
 
 </details>
 

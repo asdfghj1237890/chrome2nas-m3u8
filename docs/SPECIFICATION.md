@@ -224,7 +224,6 @@ volumes:
 | GET | `/api/jobs/{id}` | Get job details |
 | DELETE | `/api/jobs/{id}` | Cancel/delete job |
 | GET | `/api/status` | System status |
-| POST | `/api/auth/validate` | Validate API key |
 
 #### 3.2.3 Download Worker Logic
 

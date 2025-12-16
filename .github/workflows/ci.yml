@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: video-downloader/docker
+    env:
+      API_URL: http://localhost:52052
+      API_KEY: ci-test-api-key
+      DB_PASSWORD: postgres_password
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create .env for Docker Compose
+        run: |
+          cat > .env <<'EOF'
+          API_KEY=ci-test-api-key
+          DB_PASSWORD=postgres_password
+          LOG_LEVEL=INFO
+          RATE_LIMIT_PER_MINUTE=0
+          SSRF_GUARD=false
+          EOF
+
+      - name: Start API stack (db/redis/api)
+        run: docker compose -f docker-compose_not_synology.yml up -d db redis api
+
+      - name: Wait for API readiness
+        run: |
+          for i in {1..60}; do
+            if curl -fsS -H "Authorization: Bearer $API_KEY" "$API_URL/api/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose_not_synology.yml ps
+          docker compose -f docker-compose_not_synology.yml logs --no-color api
+          exit 1
+
+      - name: Run API test script
+        run: |
+          chmod +x ./test-api.sh
+          API_URL="$API_URL" API_KEY="$API_KEY" ./test-api.sh
+
+      - name: Shutdown
+        if: always()
+        run: docker compose -f docker-compose_not_synology.yml down -v
+

@@ -158,9 +158,14 @@ unzip ../WebVideo2NAS-downloader-docker.zip
 
 # Verify directory structure
 ls -la video-downloader/
-# Should show: docker/, db_data/, logs/, redis_data/
+# The release zip only contains the compose stack under `docker/`.
+# Data directories are created on first run (or you can create them manually).
+# Should show: docker/
 
 cd video-downloader/docker
+
+# Create host bind-mount directories (recommended)
+mkdir -p ../logs ../downloads/completed
 ```
 
 ##### 2. Configure Environment
@@ -173,13 +178,25 @@ DB_PASSWORD=$(openssl rand -base64 24)
 cat > .env << EOF
 DB_PASSWORD=${DB_PASSWORD}
 API_KEY=${API_KEY}
-MAX_DOWNLOAD_WORKERS=10
+MAX_DOWNLOAD_WORKERS=20
 MAX_RETRY_ATTEMPTS=3
-FFMPEG_THREADS=4
+FFMPEG_THREADS=2
 LOG_LEVEL=INFO
 ALLOWED_ORIGINS=chrome-extension://*
 # Optional: allow CORS credentials (requires explicit origins; wildcard will be rejected)
 CORS_ALLOW_CREDENTIALS=false
+
+# DB cleanup (db_cleanup service)
+# How often to prune finished jobs (seconds). Default: 3600 (1 hour)
+#CLEANUP_INTERVAL_SECONDS=3600
+
+# Security
+# Per-client rate limit for protected endpoints (0 disables)
+RATE_LIMIT_PER_MINUTE=10
+# Restrict who can call the API (comma-separated CIDRs)
+ALLOWED_CLIENT_CIDRS=
+# Basic SSRF guard for /api/download (blocks private/loopback/link-local/reserved destinations)
+SSRF_GUARD=false
 
 # Optional (insecure): TLS verification controls for tricky servers
 # INSECURE_SKIP_TLS_VERIFY=0
@@ -261,10 +278,11 @@ sudo chown -R 1026:100 /volume1/xxxxx/downloads
    ```
    /volume1/docker/video-downloader/
    ├── docker/          # Contains docker-compose files
-   ├── db_data/         # Database data directory
-   ├── logs/            # Application logs directory
-   └── redis_data/      # Redis data directory
+   ├── db_data/         # Database data directory (create this folder)
+   ├── logs/            # Application logs directory (create this folder)
+   └── redis_data/      # Redis data directory (create this folder)
    ```
+   > Note: the release zip contains only `docker/`. Create the other folders as needed for Synology bind-mount paths.
 
 **Option B: Using SSH**
 ```bash
@@ -285,12 +303,24 @@ cd /volume1/docker/video-downloader/docker
 cat > .env << 'EOF'
 DB_PASSWORD=your_secure_password_here
 API_KEY=your_api_key_minimum_32_chars
-MAX_DOWNLOAD_WORKERS=10
+MAX_DOWNLOAD_WORKERS=20
 MAX_RETRY_ATTEMPTS=3
-FFMPEG_THREADS=4
+FFMPEG_THREADS=2
 LOG_LEVEL=INFO
 ALLOWED_ORIGINS=chrome-extension://*
 CORS_ALLOW_CREDENTIALS=false
+
+# DB cleanup (db_cleanup service)
+# How often to prune finished jobs (seconds). Default: 3600 (1 hour)
+#CLEANUP_INTERVAL_SECONDS=3600
+
+# Security
+# Per-client rate limit for protected endpoints (0 disables)
+RATE_LIMIT_PER_MINUTE=10
+# Restrict who can call the API (comma-separated CIDRs)
+ALLOWED_CLIENT_CIDRS=
+# Basic SSRF guard for /api/download (blocks private/loopback/link-local/reserved destinations)
+SSRF_GUARD=false
 
 # Optional (insecure): TLS verification controls for tricky servers
 # INSECURE_SKIP_TLS_VERIFY=0
@@ -338,7 +368,7 @@ sudo docker logs video_worker_1
 
 ##### Step 8: Test API
 ```bash
-curl http://YOUR_SYNOLOGY_IP:52052/api/health
+curl -H "Authorization: Bearer <YOUR_API_KEY>" http://YOUR_SYNOLOGY_IP:52052/api/health
 # Should return: {"status":"healthy"}
 ```
 
@@ -574,9 +604,9 @@ worker3:
     - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/video_db
     - REDIS_URL=redis://redis:6379/0
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
+    - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-20}
     - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
-    - FFMPEG_THREADS=${FFMPEG_THREADS:-4}
+    - FFMPEG_THREADS=${FFMPEG_THREADS:-2}
   volumes:
     - ../downloads:/downloads
     - ../logs:/logs
@@ -597,8 +627,8 @@ docker-compose up -d
 ###### Mid-Range System (4GB RAM, 2-4 cores) - **DEFAULT**
 **Keep 2 workers** (default configuration):
 ```env
-MAX_DOWNLOAD_WORKERS=10
-FFMPEG_THREADS=4
+MAX_DOWNLOAD_WORKERS=20
+FFMPEG_THREADS=2
 ```
 
 ###### Entry-Level System (2GB RAM, 1-2 cores)
@@ -685,8 +715,11 @@ You can now:
 
 ### Environment Variables (.env)
 ```bash
-API_KEY=your-secure-api-key
-DB_PASSWORD=your-secure-db-password
+API_KEY=change-this-to-a-very-long-secure-key-minimum-32-chars
+DB_PASSWORD=ChangeThisPassword123!
+
+# Logging
+LOG_LEVEL=INFO
 
 # CORS (API)
 ALLOWED_ORIGINS=chrome-extension://*
@@ -694,12 +727,21 @@ ALLOWED_ORIGINS=chrome-extension://*
 CORS_ALLOW_CREDENTIALS=false
 
 # Worker tuning (per-video parallelism)
-MAX_DOWNLOAD_WORKERS=10
+MAX_DOWNLOAD_WORKERS=20
 MAX_RETRY_ATTEMPTS=3
-FFMPEG_THREADS=4
+FFMPEG_THREADS=2
 
-# Logging
-LOG_LEVEL=INFO
+# DB cleanup (db_cleanup service)
+# How often to prune finished jobs (seconds). Default: 3600 (1 hour)
+#CLEANUP_INTERVAL_SECONDS=3600
+
+# Security
+# Per-client rate limit for protected endpoints (0 disables)
+RATE_LIMIT_PER_MINUTE=10
+# Restrict who can call the API (comma-separated CIDRs)
+ALLOWED_CLIENT_CIDRS=
+# Basic SSRF guard for /api/download (blocks private/loopback/link-local/reserved destinations)
+SSRF_GUARD=false
 
 # Optional (insecure): TLS verification controls for tricky servers
 # INSECURE_SKIP_TLS_VERIFY=0

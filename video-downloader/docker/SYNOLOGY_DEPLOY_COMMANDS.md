@@ -2,6 +2,8 @@
 
 > Copy-paste ready command collection
 
+> Prefer DSM UI? Container Manager can import a Project from a folder containing `docker-compose.yml` (rename `docker-compose.synology.yml` to `docker-compose.yml`, then import `/volume1/docker/m3u8-downloader/docker` in **Container Manager → Projects**).
+
 ## 🚀 Initial Deployment (Complete Flow)
 
 ### Step 1: Create Directories

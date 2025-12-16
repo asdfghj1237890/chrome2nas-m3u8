@@ -306,18 +306,22 @@ sudo nano .env
 ```
 
 ##### Step 6: Deploy on Synology
+**Option A: DSM UI (Container Manager → Projects import)**
+
+1. In `/volume1/docker/m3u8-downloader/docker/`, make sure the compose file is named `docker-compose.yml` (Container Manager Projects expects this filename).
+   - If `docker-compose.yml` already exists, move it aside (e.g. rename to `docker-compose.non-synology.yml`)
+   - Rename `docker-compose.synology.yml` to `docker-compose.yml`
+2. Open **Container Manager** → **Projects** → **Create**
+3. Select the project folder: `/volume1/docker/m3u8-downloader/docker`
+4. Finish the wizard and start the project
+
+**Option B: SSH (docker-compose)**
+
 ```bash
 cd /volume1/docker/m3u8-downloader/docker
 
 # Start services
 sudo docker-compose -f docker-compose.synology.yml up -d
-
-OR
-#  remove the docker-compose.yml and rename the docker-compose.synology.yml to docker-compose.yml
-#  go to projects in the container manager, create one and select the path "m3u8-downloader/docker"
-#  the system can find the docker-compose.yml to install the whole project
-
-# After the installation:
 
 # Check status
 sudo docker ps

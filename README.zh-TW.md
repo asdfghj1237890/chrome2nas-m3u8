@@ -12,7 +12,16 @@
 
 ## 快速連結
 - **安裝（Installation）**：見下方（含 Synology 與非 Synology 分流）
+- **使用方式（Usage）**：下方「使用方式」與 Extension 操作
+- **設定（Configuration）**：常用 `.env` 與 Extension 設定
+- **疑難排解（Troubleshooting）**：常見連線/權限檢查
 - **完整文件（英文）**：請看 `README.md` 與 `docs/`
+
+## Overview（概覽）
+整體流程很簡單：
+1. Chrome Extension 偵測到影片 URL（M3U8/MP4）
+2. 一鍵送到 NAS 的 API
+3. NAS 背後的 Worker 下載、合併（必要時用 FFmpeg）並放到 `/downloads/completed/`
 
 ## 📦 安裝（Installation）
 
@@ -132,10 +141,51 @@ curl http://localhost:52052/api/health
    - **API Key**：填入 `.env` 的 `API_KEY`
 
 ### Step 3：如果不會用／出錯
-- 使用方式：看 `README.md` 的 **Usage**
-- 疑難排解：看 `README.md` 的 **Troubleshooting**
-- 參數設定：看 `README.md` 的 **Configuration**
+- 使用方式：看下方「使用方式」或 `README.md` 的 **Usage**
+- 疑難排解：看下方「疑難排解」或 `README.md` 的 **Troubleshooting**
+- 參數設定：看下方「設定」或 `README.md` 的 **Configuration**
+
+## 使用方式（Usage）
+1. 打開你要下載的影片網站並播放影片
+2. Extension 看到 URL 後，圖示/列表會出現可下載項目
+3. 點 **Send to NAS**（或類似按鈕）送出下載
+4. 在 Extension 介面看進度；完成後到 NAS 的 `/downloads/completed/` 找檔案
+
+## 設定（Configuration）
+
+### Extension 設定重點
+- **NAS Endpoint**：`http://<你的 NAS/Server 區網 IP>:52052`（不要填 `localhost`）
+- **API Key**：填你 `.env` 的 `API_KEY`
+
+### `.env` 你最常需要改的
+- **API_KEY**：Extension 用來授權呼叫 API（建議 32 字元以上隨機字串）
+- **DB_PASSWORD**：PostgreSQL 密碼（建議 24 字元以上隨機字串）
+- **LOG_LEVEL**：除錯時可改成 `DEBUG`
+
+其他進階參數（例如 worker tuning、rate limit、SSRF guard）建議先維持預設，等你真的需要再調整（細節見 `README.md`）。
+
+## 疑難排解（Troubleshooting）
+
+### Extension 連不上 NAS
+- 確認 **NAS Endpoint** 用的是 NAS/Server 的 IP（例：`http://192.168.1.10:52052`），不是 `localhost`
+- 用瀏覽器或命令測試 health：
+  - `http://YOUR_NAS_IP:52052/api/health`
+- 確認防火牆允許 52052（Synology：DSM 防火牆規則）
+
+### Synology 寫不進下載資料夾（權限）
+- 回到 DSM 檢查下載資料夾權限（你執行 Project 的帳號要可寫入）
+- 先在下載資料夾手動建立測試檔，確認真的可寫
+
+### 下載失敗或很慢
+- 看 worker logs（在 Container Manager / Docker logs）
+- 確認 NAS 磁碟空間足夠
+- 站點可能有防盜連/URL 失效/DRM（這類通常無法下載）
+
+## 安全建議（Security）
+- **不要把服務直接公開到網際網路**
+- **API_KEY 不要外洩**
+- 建議只在 LAN 使用或透過 VPN（例如 Tailscale）
 
 ## 需要更完整的內容？
-- 詳細安裝、設定、疑難排解與安全建議：請看 `README.md`
+- 英文完整版（含更多範例、進階設定與完整疑難排解）：請看 `README.md`
 

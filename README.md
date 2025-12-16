@@ -8,7 +8,11 @@
 
 > Seamlessly capture web video URLs (M3U8 and MP4) from Chrome and download them to your NAS
 
-> **⚠️ Disclaimer**: This project does **not** guarantee every video can be downloaded. Some sites use DRM, expiring URLs, anti-hotlinking, IP restrictions, or change their delivery logic at any time.
+> [!IMPORTANT]
+> This project does **not** guarantee every video can be downloaded. Some sites use DRM, expiring URLs, anti-hotlinking, IP restrictions, or change their delivery logic at any time.
+
+> [!CAUTION]
+> It is **not recommended** to expose this service directly to the public internet. Prefer accessing your NAS over your **LAN** or via **VPN** (e.g. **Tailscale**).
 
 ## Table of Contents
 

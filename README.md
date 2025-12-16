@@ -170,6 +170,7 @@ You will do 3 things:
 2. Project folder (example): `/volume1/docker/video-downloader/`
 3. Downloads folder (example): `/volume1/<YOUR_SHARED_FOLDER_NAME>/downloads/completed`
 4. Ensure the account you use in Container Manager has **read/write** permissions to both folders
+   - If you see permission errors later (can’t write to `/downloads`), re-check DSM folder permissions and try creating a test file in the downloads folder.
 
 ##### 3. Download & extract release (DSM UI)
 1. Download `WebVideo2NAS-downloader-docker.zip` from GitHub Releases
@@ -222,6 +223,7 @@ mkdir -p ../logs ../downloads/completed
 API_KEY=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 24)
 
+## If you don't have openssl, set API_KEY/DB_PASSWORD manually (any strong random strings)
 cat > .env << EOF
 DB_PASSWORD=${DB_PASSWORD}
 API_KEY=${API_KEY}
@@ -253,7 +255,7 @@ curl http://localhost:52052/api/health
 3. Click **Load unpacked**
 4. Select the `chrome-extension` folder
 5. Open extension **Settings**:
-   - **NAS Endpoint**: `http://YOUR_NAS_IP:52052`
+   - **NAS Endpoint**: `http://YOUR_NAS_IP:52052` (use your NAS/server LAN IP; not `localhost`)
    - **API Key**: your `API_KEY` from `.env`
 6. Click **Test Connection** → should show connected
 

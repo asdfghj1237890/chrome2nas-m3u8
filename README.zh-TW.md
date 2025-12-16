@@ -35,6 +35,7 @@
 2. 專案資料夾（例）：`/volume1/docker/video-downloader/`
 3. 下載資料夾（例）：`/volume1/<你的共享資料夾名稱>/downloads/completed`
 4. 確認你在 Container Manager 執行 Project 使用的帳號，對這兩個資料夾都有 **讀/寫** 權限
+   - 如果之後出現權限錯誤（寫不進 `/downloads`），回來檢查 DSM 資料夾權限，並先嘗試在下載資料夾手動建立一個測試檔案確認可寫入
 
 #### 3. 下載並解壓縮 release（DSM UI）
 1. 從 GitHub Releases 下載 `WebVideo2NAS-downloader-docker.zip`
@@ -94,6 +95,7 @@ mkdir -p ../logs ../downloads/completed
 API_KEY=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 24)
 
+# 如果你的環境沒有 openssl，也可以自己手動填入 API_KEY/DB_PASSWORD（用夠長、夠隨機的字串即可）
 cat > .env << EOF
 DB_PASSWORD=${DB_PASSWORD}
 API_KEY=${API_KEY}
@@ -126,7 +128,7 @@ curl http://localhost:52052/api/health
 2. 開啟 **Developer mode**
 3. **Load unpacked**，選擇 `chrome-extension` 資料夾
 4. 設定：
-   - **NAS Endpoint**：`http://YOUR_NAS_IP:52052`
+   - **NAS Endpoint**：`http://YOUR_NAS_IP:52052`（請填 NAS/Server 的區網 IP；不要填 `localhost`）
    - **API Key**：填入 `.env` 的 `API_KEY`
 
 ### Step 3：如果不會用／出錯

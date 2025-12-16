@@ -4,6 +4,12 @@
 let detectedUrls = new Set();
 let currentTabUrls = {};
 let currentTabUrlKeys = {};
+let lastNotifyAtByTab = {};
+
+// Some sites fetch media via Service Worker / browser context where tabId is -1.
+// Keep these "orphan" detections and later attach them to the active tab by initiator/documentUrl.
+let orphanUrlInfos = [];
+let orphanUrlKeys = new Set();
 
 // Store captured request headers for m3u8 URLs
 let capturedHeaders = {};
@@ -13,6 +19,208 @@ let userSettings = {
   autoDetect: true,
   showNotifications: true
 };
+
+function scoreUrlInfo(info) {
+  const now = Date.now();
+  const ts = Number(info?.timestamp) || 0;
+  const ageMs = now - ts;
+
+  let score = 0;
+
+  const rawUrl = String(info?.url || '');
+  const urlLower = rawUrl.toLowerCase();
+
+  // Strongly prefer very recent URLs (what the player is actively fetching).
+  if (ageMs < 10_000) score += 10;
+  else if (ageMs < 30_000) score += 8;
+  else if (ageMs < 120_000) score += 4;
+
+  // Prefer manifests / single-file videos over segments.
+  if (urlLower.includes('.m3u8')) score += 4;
+  if (urlLower.includes('.mp4')) score += 1;
+
+  // Request type hint (Chrome categorizes actual playback as "media" on many sites).
+  const rt = String(info?.requestType || '').toLowerCase();
+  if (rt === 'media') score += 6;
+
+  // MP4 playback often uses Range requests. If we saw any, it's a strong signal.
+  const rangeHits = Number(info?.rangeHitCount) || 0;
+  if (rangeHits > 0) score += 12;
+
+  // Repeated hits usually means the player is actively using this URL.
+  const hits = Number(info?.hitCount) || 0;
+  if (hits >= 3) score += 2;
+  if (hits >= 10) score += 2;
+
+  return score;
+}
+
+function getSortedUrlsForTab(tabId) {
+  const list = Array.isArray(currentTabUrls[tabId]) ? currentTabUrls[tabId] : [];
+  const scored = list.map((u) => {
+    const score = scoreUrlInfo(u);
+    return { ...u, score, isNowPlaying: false };
+  });
+
+  scored.sort((a, b) => (b.score - a.score) || ((b.timestamp || 0) - (a.timestamp || 0)));
+
+  // Only mark "now playing" when we have a reasonably strong signal.
+  if (scored[0]) {
+    const top = scored[0];
+    const topScore = Number(top.score) || 0;
+    const secondScore = scored[1] ? (Number(scored[1].score) || 0) : -Infinity;
+
+    // Don't label "now playing" when nothing is actively playing.
+    // Require both recency + an "activity" signal beyond just being seen once.
+    const ageMs = Date.now() - (Number(top.timestamp) || 0);
+    const isRecent = ageMs >= 0 && ageMs <= 30_000;
+    const isRecentManifest = ageMs >= 0 && ageMs <= 5 * 60_000;
+
+    const urlLower = String(top.url || '').toLowerCase();
+    const isManifest = urlLower.includes('.m3u8');
+
+    const rt = String(top.requestType || '').toLowerCase();
+    const hits = Number(top.hitCount) || 0;
+    const rangeHits = Number(top.rangeHitCount) || 0;
+    const hasTraditionalSignal = rangeHits > 0 || hits >= 2 || rt === 'media';
+    // HLS VOD manifests are often fetched only once; allow "recent manifest" as a weaker signal.
+    const hasActivitySignal = hasTraditionalSignal || (isManifest && isRecentManifest);
+
+    const isStrongAbsolute = topScore >= 12;
+    const isClearWinner = topScore >= 8 && topScore >= (secondScore + 2);
+    // If we're only relying on the manifest heuristic, allow a lower score threshold
+    // but still require being a clear winner to reduce false positives.
+    const isManifestWinner = isManifest && topScore >= 4 && topScore >= (secondScore + 2);
+
+    // If we're only relying on "recent manifest" (no repeat hits / media / range),
+    // require being a clear winner to reduce false positives on pages with many manifests.
+    const qualifiesByScore = hasTraditionalSignal ? (isStrongAbsolute || isClearWinner) : (isClearWinner || isManifestWinner);
+
+    const recentEnough = hasTraditionalSignal ? isRecent : isRecentManifest;
+    if (recentEnough && hasActivitySignal && qualifiesByScore) {
+      top.isNowPlaying = true;
+    }
+  }
+
+  return scored;
+}
+
+function safeOrigin(u) {
+  try {
+    return new URL(u).origin;
+  } catch (_) {
+    return null;
+  }
+}
+
+function pruneOrphans() {
+  // Keep this list bounded to avoid unbounded growth.
+  const MAX = 200;
+  const MAX_AGE_MS = 5 * 60_000;
+  const now = Date.now();
+
+  orphanUrlInfos = orphanUrlInfos
+    .filter(x => x && typeof x.url === 'string' && x.url && (now - (Number(x.timestamp) || 0)) <= MAX_AGE_MS)
+    .slice(-MAX);
+
+  orphanUrlKeys = new Set(orphanUrlInfos.map(x => x.url));
+}
+
+function getSortedUrlsForTabWithOrphans(tabId, tabUrl) {
+  pruneOrphans();
+
+  const tabList = Array.isArray(currentTabUrls[tabId]) ? currentTabUrls[tabId] : [];
+  const tabOrigin = safeOrigin(tabUrl);
+  if (!tabOrigin) return getSortedUrlsForTab(tabId);
+
+  // Collect origins already known to belong to this tab (CDNs, media domains, etc.).
+  const tabKnownOrigins = new Set([tabOrigin]);
+  for (const item of tabList) {
+    const o = item && item.url ? safeOrigin(item.url) : null;
+    if (o) tabKnownOrigins.add(o);
+  }
+
+  const merged = tabList.slice();
+  const seen = new Set(merged.map(x => x && x.url).filter(Boolean));
+
+  for (const info of orphanUrlInfos) {
+    if (!info || !info.url) continue;
+    if (seen.has(info.url)) continue;
+
+    // Only attach orphans that likely belong to this tab (same initiator/documentUrl origin).
+    const pageOrigin = safeOrigin(info.pageUrl);
+    const urlOrigin = safeOrigin(info.url);
+
+    // Primary: page origin matches current tab.
+    // Fallback: if page origin is missing/unknown, allow matching against known origins
+    // already seen in this tab (helps SW-based and CDN-hosted manifests).
+    const belongsToTab =
+      (pageOrigin && pageOrigin === tabOrigin) ||
+      (!pageOrigin && urlOrigin && tabKnownOrigins.has(urlOrigin));
+
+    if (belongsToTab) {
+      merged.push(info);
+      seen.add(info.url);
+    }
+  }
+
+  const scored = merged.map((u) => {
+    const score = scoreUrlInfo(u);
+    return { ...u, score, isNowPlaying: false };
+  });
+
+  scored.sort((a, b) => (b.score - a.score) || ((b.timestamp || 0) - (a.timestamp || 0)));
+
+  // Only mark "now playing" when we have a reasonably strong signal.
+  if (scored[0]) {
+    const top = scored[0];
+    const topScore = Number(top.score) || 0;
+    const secondScore = scored[1] ? (Number(scored[1].score) || 0) : -Infinity;
+
+    const ageMs = Date.now() - (Number(top.timestamp) || 0);
+    const isRecent = ageMs >= 0 && ageMs <= 30_000;
+    const isRecentManifest = ageMs >= 0 && ageMs <= 5 * 60_000;
+
+    const urlLower = String(top.url || '').toLowerCase();
+    const isManifest = urlLower.includes('.m3u8');
+
+    const rt = String(top.requestType || '').toLowerCase();
+    const hits = Number(top.hitCount) || 0;
+    const rangeHits = Number(top.rangeHitCount) || 0;
+    const hasTraditionalSignal = rangeHits > 0 || hits >= 2 || rt === 'media';
+    const hasActivitySignal = hasTraditionalSignal || (isManifest && isRecentManifest);
+
+    const isStrongAbsolute = topScore >= 12;
+    const isClearWinner = topScore >= 8 && topScore >= (secondScore + 2);
+    const isManifestWinner = isManifest && topScore >= 4 && topScore >= (secondScore + 2);
+
+    const qualifiesByScore = hasTraditionalSignal ? (isStrongAbsolute || isClearWinner) : (isClearWinner || isManifestWinner);
+
+    const recentEnough = hasTraditionalSignal ? isRecent : isRecentManifest;
+    if (recentEnough && hasActivitySignal && qualifiesByScore) {
+      top.isNowPlaying = true;
+    }
+  }
+
+  return scored;
+}
+
+function notifyDetectedUrlsUpdated(tabId) {
+  if (tabId == null || typeof tabId !== 'number' || tabId < 0) return;
+  const now = Date.now();
+  const last = Number(lastNotifyAtByTab[tabId]) || 0;
+  if (now - last < 1000) return; // throttle to avoid spamming UI
+  lastNotifyAtByTab[tabId] = now;
+
+  try {
+    chrome.runtime.sendMessage({ action: 'detectedUrlsUpdated', tabId }, () => {
+      // Ignore "no receiver" errors when sidepanel isn't open.
+      void chrome.runtime.lastError;
+    });
+  } catch (_) {
+    // Ignore (service worker may be shutting down)
+  }
+}
 
 // Load settings on startup
 chrome.storage.sync.get(['autoDetect', 'showNotifications'], (result) => {
@@ -53,6 +261,9 @@ function isCandidateVideoUrl(rawUrl) {
   }
 
   const lastSegment = pathnameLower.split('/').pop() || '';
+  // Filter out streaming segments. They create lots of "similar" URLs and are not
+  // what users want to send to NAS (they are only small chunks).
+  if (lastSegment.endsWith('.ts') || lastSegment.endsWith('.m4s')) return false;
   if (nonVideoFinalExts.some(ext => lastSegment.endsWith(ext))) return false;
 
   return true;
@@ -66,12 +277,19 @@ chrome.webRequest.onBeforeRequest.addListener(
     if (isCandidateVideoUrl(details.url)) {
       console.log('Detected video URL:', details.url);
       
+      const isRealTab = (details.tabId != null && typeof details.tabId === 'number' && details.tabId >= 0);
+
       // Store URL with tab info (preserve original URL case)
       const urlInfo = {
         url: details.url,
-        tabId: details.tabId,
+        tabId: isRealTab ? details.tabId : -1,
         timestamp: Date.now(),
-        pageUrl: details.initiator || details.documentUrl
+        pageUrl: details.initiator || details.documentUrl,
+        requestType: details.type,
+        frameId: details.frameId,
+        method: details.method,
+        hitCount: 1,
+        rangeHitCount: 0
       };
       
       // Add to detected URLs
@@ -79,29 +297,54 @@ chrome.webRequest.onBeforeRequest.addListener(
       detectedUrls.add(details.url);
       
       // Store for current tab
-      if (!currentTabUrls[details.tabId]) {
-        currentTabUrls[details.tabId] = [];
-      }
-      if (!currentTabUrlKeys[details.tabId]) {
-        currentTabUrlKeys[details.tabId] = new Set();
-      }
+      if (isRealTab) {
+        if (!currentTabUrls[details.tabId]) {
+          currentTabUrls[details.tabId] = [];
+        }
+        if (!currentTabUrlKeys[details.tabId]) {
+          currentTabUrlKeys[details.tabId] = new Set();
+        }
 
-      // Deduplicate per-tab by exact URL string: only show once in sidepanel
-      if (!currentTabUrlKeys[details.tabId].has(details.url)) {
-        currentTabUrlKeys[details.tabId].add(details.url);
-        currentTabUrls[details.tabId].push(urlInfo);
+        // Deduplicate per-tab by exact URL string: only show once in sidepanel
+        if (!currentTabUrlKeys[details.tabId].has(details.url)) {
+          currentTabUrlKeys[details.tabId].add(details.url);
+          currentTabUrls[details.tabId].push(urlInfo);
+        } else {
+          // Update the existing entry's metadata (keep ordering stable)
+          const list = currentTabUrls[details.tabId];
+          const existing = list.find(item => item && item.url === details.url);
+          if (existing) {
+            existing.timestamp = urlInfo.timestamp;
+            existing.pageUrl = urlInfo.pageUrl;
+            existing.requestType = urlInfo.requestType;
+            existing.frameId = urlInfo.frameId;
+            existing.method = urlInfo.method;
+            existing.hitCount = (Number(existing.hitCount) || 0) + 1;
+            notifyDetectedUrlsUpdated(details.tabId);
+          }
+        }
       } else {
-        // Update the existing entry's metadata (keep ordering stable)
-        const list = currentTabUrls[details.tabId];
-        const existing = list.find(item => item && item.url === details.url);
-        if (existing) {
-          existing.timestamp = urlInfo.timestamp;
-          existing.pageUrl = urlInfo.pageUrl;
+        // Orphan request: keep it so sidepanel can still show m3u8 for SW-based sites.
+        if (!orphanUrlKeys.has(details.url)) {
+          orphanUrlKeys.add(details.url);
+          orphanUrlInfos.push(urlInfo);
+          pruneOrphans();
+        } else {
+          const existing = orphanUrlInfos.find(item => item && item.url === details.url);
+          if (existing) {
+            existing.timestamp = urlInfo.timestamp;
+            existing.pageUrl = urlInfo.pageUrl;
+            existing.requestType = urlInfo.requestType;
+            existing.frameId = urlInfo.frameId;
+            existing.method = urlInfo.method;
+            existing.hitCount = (Number(existing.hitCount) || 0) + 1;
+            pruneOrphans();
+          }
         }
       }
       
       // Update badge
-      updateBadge(details.tabId);
+      if (isRealTab) updateBadge(details.tabId);
       
       // Store in chrome.storage for popup access
       chrome.storage.local.set({ detectedUrls: Array.from(detectedUrls) });
@@ -152,6 +395,21 @@ chrome.webRequest.onSendHeaders.addListener(
             } else if (!SINGLETON_HEADERS.has(key)) {
               headersObj[key] = mergeHeaderValue(headersObj[key], header.value, ', ');
             }
+          }
+        }
+      }
+
+      // Mark MP4 Range requests as a strong "actively playing" signal.
+      const hasRange = Object.keys(headersObj).some(k => typeof k === 'string' && k.toLowerCase() === 'range');
+      if (hasRange && details.tabId != null && typeof details.tabId === 'number' && details.tabId >= 0) {
+        const tabList = currentTabUrls[details.tabId];
+        if (Array.isArray(tabList)) {
+          const item = tabList.find(x => x && x.url === details.url);
+          if (item) {
+            item.rangeHitCount = (Number(item.rangeHitCount) || 0) + 1;
+            item.timestamp = Date.now();
+            item.requestType = item.requestType || details.type;
+            notifyDetectedUrlsUpdated(details.tabId);
           }
         }
       }
@@ -233,9 +491,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     // Try to find video URL in current tab
     const tabUrls = currentTabUrls[tab.id];
     if (tabUrls && tabUrls.length > 0) {
-      // Send the most recent video URL
-      const latest = tabUrls[tabUrls.length - 1];
-      sendToNAS(latest.url, tab.title, tab.url);
+      // Send the best candidate (prefer "now playing" heuristics)
+      const best = getSortedUrlsForTab(tab.id)[0];
+      sendToNAS(best.url, tab.title, tab.url);
     } else {
       showNotification('Error', 'No video URL found on this page');
     }
@@ -533,11 +791,26 @@ chrome.action.onClicked.addListener(async (tab) => {
 // Listen for messages from sidepanel
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'getDetectedUrls') {
-    // Return URLs for current active tab
+    const requestedTabId = (request && typeof request.tabId === 'number') ? request.tabId : null;
+
+    // If caller provided tabId, return that tab's URLs deterministically.
+    if (requestedTabId != null && requestedTabId >= 0) {
+      chrome.tabs.get(requestedTabId, (tab) => {
+        // If the tab no longer exists, fall back to per-tab list only.
+        const tabUrl = tab && tab.url ? tab.url : '';
+        sendResponse({ urls: getSortedUrlsForTabWithOrphans(requestedTabId, tabUrl) });
+      });
+      return true;
+    }
+
+    // Fallback: Return URLs for current active tab
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
-        const urls = currentTabUrls[tabs[0].id] || [];
-        sendResponse({ urls: urls });
+        chrome.tabs.get(tabs[0].id, (tab) => {
+          const tabUrl = tab && tab.url ? tab.url : (tabs[0].url || '');
+          const urls = getSortedUrlsForTabWithOrphans(tabs[0].id, tabUrl);
+          sendResponse({ urls });
+        });
       } else {
         sendResponse({ urls: [] });
       }

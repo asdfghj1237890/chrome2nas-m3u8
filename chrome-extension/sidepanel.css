@@ -176,6 +176,38 @@ button, input, select, textarea {
   text-overflow: ellipsis;
 }
 
+.badge-now-playing {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ede9fe;
+  color: #5b21b6;
+  vertical-align: middle;
+}
+
+.badges-qualities {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+  flex-wrap: wrap;
+}
+
+.badge-quality {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #e0e7ff;
+  line-height: 1.2;
+}
+
 .url-link {
   font-size: 12px;
   color: var(--text-muted);

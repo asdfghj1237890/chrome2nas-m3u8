@@ -4,6 +4,8 @@ let settings = {};
 let detectedUrls = [];
 let jobs = [];
 let expandedErrorIds = new Set(); // Track which error details are expanded
+let activeTabId = null;
+let loadDetectedUrlsSeq = 0;
 
 const i18n = (typeof window !== 'undefined' && window.WV2N_I18N) ? window.WV2N_I18N : null;
 function t(key, vars) {
@@ -76,6 +78,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Setup event listeners
   setupEventListeners();
+
+  // Background will notify us when "activity" changes (hitCount/rangeHitCount) even
+  // if no new URL is added. This makes the Now Playing badge appear without manual refresh.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.action === 'detectedUrlsUpdated') {
+      // Only refresh when the update belongs to the tab we're currently showing.
+      if (activeTabId != null && message.tabId === activeTabId) {
+        loadDetectedUrls();
+      }
+    }
+  });
 });
 
 // Setup event listeners
@@ -220,9 +233,30 @@ async function checkConnection() {
 
 // Load detected URLs
 function loadDetectedUrls() {
-  chrome.runtime.sendMessage({ action: 'getDetectedUrls' }, (response) => {
-    detectedUrls = response.urls || [];
-    renderDetectedUrls();
+  const seq = ++loadDetectedUrlsSeq;
+
+  // Avoid showing stale URLs while switching tabs.
+  detectedUrls = [];
+  renderDetectedUrls();
+
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (seq !== loadDetectedUrlsSeq) return;
+
+    activeTabId = (tabs && tabs[0]) ? tabs[0].id : null;
+    chrome.runtime.sendMessage({ action: 'getDetectedUrls', tabId: activeTabId }, (response) => {
+      if (seq !== loadDetectedUrlsSeq) return;
+
+      // If the sidepanel lost connection to the background (e.g., reloaded),
+      // keep it empty rather than showing stale data.
+      if (chrome.runtime.lastError) {
+        detectedUrls = [];
+        renderDetectedUrls();
+        return;
+      }
+
+      detectedUrls = (response && response.urls) ? response.urls : [];
+      renderDetectedUrls();
+    });
   });
 }
 
@@ -240,13 +274,37 @@ function renderDetectedUrls() {
     return;
   }
 
-  listElement.innerHTML = detectedUrls.map((urlInfo, index) => {
+  // Prefer higher resolution items first (but keep Now Playing on top).
+  const sortedUrls = detectedUrls.slice().sort((a, b) => {
+    const aNow = a && a.isNowPlaying ? 1 : 0;
+    const bNow = b && b.isNowPlaying ? 1 : 0;
+    if (aNow !== bNow) return bNow - aNow;
+
+    const aQ = getMaxQualityNumber(a && a.url);
+    const bQ = getMaxQualityNumber(b && b.url);
+    if (aQ !== bQ) return bQ - aQ;
+
+    const aScore = Number(a && a.score) || 0;
+    const bScore = Number(b && b.score) || 0;
+    if (aScore !== bScore) return bScore - aScore;
+
+    const aTs = Number(a && a.timestamp) || 0;
+    const bTs = Number(b && b.timestamp) || 0;
+    return bTs - aTs;
+  });
+
+  listElement.innerHTML = sortedUrls.map((urlInfo, index) => {
     const hasIp = containsIpAddress(urlInfo.url);
     const urlLower = urlInfo.url.toLowerCase();
-    const videoType = urlLower.includes('.mp4') ? 'MP4' : 'M3U8';
+    // Some sites use paths like "...something.mp4/index.m3u8". Prefer the actual manifest type.
+    const videoType = urlLower.includes('.m3u8') ? 'M3U8' : (urlLower.includes('.mp4') ? 'MP4' : 'VIDEO');
+    const nowPlayingBadge = urlInfo.isNowPlaying
+      ? ` <span class="badge-now-playing">${escapeHtml(t('url.nowPlaying'))}</span>`
+      : '';
+    const qualityBadges = buildQualityBadgesHtml(urlInfo.url);
     return `
     <div class="url-item">
-      <div class="url-title">${videoType} #${index + 1}</div>
+      <div class="url-title">${videoType} #${index + 1}${nowPlayingBadge}${qualityBadges}</div>
       <div class="url-link" title="${escapeHtml(urlInfo.url)}">${escapeHtml(truncateUrl(urlInfo.url))}</div>
       ${hasIp ? `
         <div class="ip-warning">
@@ -604,6 +662,52 @@ function showToast(message) {
 function truncateUrl(url, maxLength = 60) {
   if (url.length <= maxLength) return url;
   return url.substring(0, maxLength) + '...';
+}
+
+function extractQualitiesFromUrl(url) {
+  const raw = String(url || '');
+  const lower = raw.toLowerCase();
+  if (!lower) return [];
+
+  const allowed = new Set([2160, 1440, 1080, 720, 540, 480, 360, 240]);
+  const found = new Set();
+
+  // Common patterns: "...1080p...", "..._720p...", "/480p/", etc.
+  const pMatches = lower.matchAll(/(?:^|[^0-9])([0-9]{3,4})p(?:$|[^a-z0-9])/g);
+  for (const m of pMatches) {
+    const n = Number(m[1]);
+    if (allowed.has(n)) found.add(n);
+  }
+
+  // Query string hints: ?quality=720, &res=1080, &height=480, etc.
+  const qMatches = lower.matchAll(/[?&](?:res|resolution|quality|q|height|h)=([0-9]{3,4})\b/g);
+  for (const m of qMatches) {
+    const n = Number(m[1]);
+    if (allowed.has(n)) found.add(n);
+  }
+
+  return Array.from(found)
+    .sort((a, b) => b - a)
+    .map(n => `${n}p`);
+}
+
+function buildQualityBadgesHtml(url) {
+  const qualities = extractQualitiesFromUrl(url);
+  if (!qualities.length) return '';
+  return ` <span class="badges-qualities">${qualities
+    .map(q => `<span class="badge-quality" title="${escapeHtml(q)}">${escapeHtml(q)}</span>`)
+    .join('')}</span>`;
+}
+
+function getMaxQualityNumber(url) {
+  const qualities = extractQualitiesFromUrl(url);
+  if (!qualities.length) return -1;
+  let max = -1;
+  for (const q of qualities) {
+    const n = parseInt(String(q).replace(/[^0-9]/g, ''), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
 }
 
 function getStatusLabel(status) {

@@ -48,6 +48,7 @@
 
       'url.ipWarning.title': 'IP-Restricted URL Detected',
       'url.ipWarning.body': 'This URL contains an IP address, meaning the website restricts downloads to that specific IP.\nTo download successfully, your NAS and PC must use the same IP address.\nUse Tailscale exit node or a similar VPN solution to route the traffic through the same IP address.',
+      'url.nowPlaying': 'Now Playing',
       'url.sendToNas': 'Send to NAS',
       'url.copy': 'Copy',
 
@@ -160,6 +161,7 @@
 
       'url.ipWarning.title': '偵測到 IP 限制的 URL',
       'url.ipWarning.body': '此 URL 含有 IP 位址，代表網站可能限制只能由該 IP 下載。\n要下載成功，NAS 與電腦必須使用相同的 IP 位址。\n可使用 Tailscale Exit Node 或類似 VPN，讓流量走同一個 IP。',
+      'url.nowPlaying': '正在播放',
       'url.sendToNas': '送到 NAS',
       'url.copy': '複製',
 
@@ -272,6 +274,7 @@
 
       'url.ipWarning.title': '检测到 IP 限制的 URL',
       'url.ipWarning.body': '此 URL 含有 IP 地址，表示网站可能限制只能由该 IP 下载。\n要下载成功，NAS 与电脑必须使用相同的 IP 地址。\n可使用 Tailscale Exit Node 或类似 VPN，让流量走同一个 IP。',
+      'url.nowPlaying': '正在播放',
       'url.sendToNas': '发送到 NAS',
       'url.copy': '复制',
 
@@ -384,6 +387,7 @@
 
       'url.ipWarning.title': 'IP 制限の URL を検出',
       'url.ipWarning.body': 'この URL には IP アドレスが含まれており、サイトが特定の IP のみでダウンロードを許可している可能性があります。\n成功させるには、NAS と PC が同じ IP を使用する必要があります。\nTailscale の Exit Node などの VPN で同じ IP 経由にしてください。',
+      'url.nowPlaying': '再生中',
       'url.sendToNas': 'NAS に送信',
       'url.copy': 'コピー',
 
@@ -496,6 +500,7 @@
 
       'url.ipWarning.title': 'IP 제한 URL 감지됨',
       'url.ipWarning.body': '이 URL에는 IP 주소가 포함되어 있어, 사이트가 해당 IP에서만 다운로드를 허용할 수 있습니다.\n성공적으로 다운로드하려면 NAS와 PC가 같은 IP 주소를 사용해야 합니다.\nTailscale Exit Node 또는 유사한 VPN 솔루션으로 트래픽을 동일한 IP로 라우팅하세요.',
+      'url.nowPlaying': '재생 중',
       'url.sendToNas': 'NAS로 보내기',
       'url.copy': '복사',
 
@@ -608,6 +613,7 @@
 
       'url.ipWarning.title': 'URL avec restriction IP détectée',
       'url.ipWarning.body': 'Cette URL contient une adresse IP, ce qui peut indiquer une restriction de téléchargement à cette IP.\nPour réussir, votre NAS et votre PC doivent utiliser la même IP.\nUtilisez un Exit Node Tailscale ou un VPN similaire pour router le trafic via la même IP.',
+      'url.nowPlaying': 'En cours de lecture',
       'url.sendToNas': 'Envoyer au NAS',
       'url.copy': 'Copier',
 
@@ -720,6 +726,7 @@
 
       'url.ipWarning.title': 'URL con restricción por IP detectada',
       'url.ipWarning.body': 'Esta URL contiene una dirección IP, lo que puede indicar que el sitio restringe la descarga a esa IP.\nPara descargar con éxito, tu NAS y tu PC deben usar la misma IP.\nUsa un Exit Node de Tailscale o una VPN similar para enrutar el tráfico por la misma IP.',
+      'url.nowPlaying': 'Reproduciendo',
       'url.sendToNas': 'Enviar al NAS',
       'url.copy': 'Copiar',
 
@@ -832,6 +839,7 @@
 
       'url.ipWarning.title': 'URL com restrição de IP detectada',
       'url.ipWarning.body': 'Esta URL contém um endereço IP, o que pode indicar que o site restringe o download a esse IP.\nPara baixar com sucesso, seu NAS e seu PC precisam usar o mesmo IP.\nUse um Exit Node do Tailscale ou uma VPN similar para rotear o tráfego pelo mesmo IP.',
+      'url.nowPlaying': 'Reproduzindo',
       'url.sendToNas': 'Enviar ao NAS',
       'url.copy': 'Copiar',
 

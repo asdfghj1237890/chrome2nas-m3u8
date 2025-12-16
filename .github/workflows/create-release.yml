@@ -45,12 +45,20 @@ jobs:
       - name: 'Create chrome-extension package'
         run: |
           cd chrome-extension
-          zip -r ../WebVideo2NAS-chrome-extension.zip .
+          zip -r ../WebVideo2NAS-chrome-extension.zip . \
+            -x "tests/*" "tests/**" \
+               "node_modules/*" "node_modules/**" \
+               "vitest.config.js" \
+               "package.json" "package-lock.json"
 
       - name: 'Create docker package'
         run: |
           cd video-downloader
-          zip -r ../WebVideo2NAS-downloader-docker.zip .
+          zip -r ../WebVideo2NAS-downloader-docker.zip . \
+            -x "docker/api/tests/*" "docker/api/tests/**" \
+               "docker/worker/tests/*" "docker/worker/tests/**" \
+               "**/__pycache__/**" "**/.pytest_cache/**" \
+               "*.pyc" "*.pyo" "*.pyd"
 
       - name: 'Create Release'
         uses: softprops/action-gh-release@v2

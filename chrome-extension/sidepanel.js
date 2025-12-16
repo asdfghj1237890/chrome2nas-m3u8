@@ -673,7 +673,8 @@ function extractQualitiesFromUrl(url) {
   const found = new Set();
 
   // Common patterns: "...1080p...", "..._720p...", "/480p/", etc.
-  const pMatches = lower.matchAll(/(?:^|[^0-9])([0-9]{3,4})p(?:$|[^a-z0-9])/g);
+  // Use lookarounds so multiple adjacent matches (e.g. "...720p_1080p...") are not skipped.
+  const pMatches = lower.matchAll(/(?<![0-9])([0-9]{3,4})p(?![a-z0-9])/g);
   for (const m of pMatches) {
     const n = Number(m[1]);
     if (allowed.has(n)) found.add(n);

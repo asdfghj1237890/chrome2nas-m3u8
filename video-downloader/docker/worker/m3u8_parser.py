@@ -43,9 +43,9 @@ class M3U8Parser:
             return headers
         
         sanitized = headers.copy()
-        accept_encoding = sanitized.get('Accept-Encoding', '')
+        accept_encoding = str(sanitized.get('Accept-Encoding', '') or '')
         
-        if 'br' in accept_encoding:
+        if 'br' in accept_encoding.lower():
             # Remove 'br' from Accept-Encoding
             parts = [p.strip() for p in accept_encoding.split(',')]
             parts = [p for p in parts if p.lower() != 'br']
@@ -229,10 +229,14 @@ class M3U8Parser:
                 if segment.key.iv:
                     iv_str = segment.key.iv
                     if isinstance(iv_str, str):
-                        if iv_str.startswith("0x") or iv_str.startswith("0X"):
-                            iv = bytes.fromhex(iv_str[2:])
-                        else:
-                            iv = bytes.fromhex(iv_str)
+                        try:
+                            if iv_str.startswith("0x") or iv_str.startswith("0X"):
+                                iv = bytes.fromhex(iv_str[2:])
+                            else:
+                                iv = bytes.fromhex(iv_str)
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Invalid IV value in m3u8, ignoring IV: {iv_str!r} ({e})")
+                            iv = None
 
                 key_info = {
                     "method": "AES-128",

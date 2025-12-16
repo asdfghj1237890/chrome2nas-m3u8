@@ -9,6 +9,55 @@ on:
     branches: [main]
 
 jobs:
+  python-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Python
+        run: uv python install 3.11
+
+      - name: Install Python test dependencies
+        run: |
+          uv venv --python 3.11
+          uv pip install pytest \
+            -r video-downloader/docker/worker/requirements.txt \
+            -r video-downloader/docker/api/requirements.txt
+
+      - name: Run Python unit tests (worker + api)
+        run: |
+          uv run pytest -q \
+            video-downloader/docker/worker/tests \
+            video-downloader/docker/api/tests
+
+  chrome-extension-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: chrome-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
   api-smoke:
     runs-on: ubuntu-latest
     defaults:

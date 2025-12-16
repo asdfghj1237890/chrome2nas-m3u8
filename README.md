@@ -1110,6 +1110,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details>
 <summary><strong>Full Changelog (click to expand)</strong></summary>
 
+### [1.8.4] - 2025-12-16
+
+#### Changed
+- Improve video URL detection and Chrome extension UI behavior
+- Update deployment instructions and Docker Compose configuration for the downloader stack
+- Rename downloader directory from `m3u8-downloader/` to `video-downloader/` and update related configuration references
+- Bump project version to `1.8.4` across Chrome extension, API, worker, and docs
+
+#### Docs
+- Update installation/examples to use `video-downloader/` and `video_*` container names (remove legacy `m3u8-*`)
+
 ### [1.8.3] - 2025-12-16
 
 #### Added
@@ -1129,7 +1140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### [1.8.1] - 2025-12-16
 
 #### Changed
-- Rename downloader directory to `video-downloader/` and update related docs/config references
+- Documentation updates
 
 ### [1.8.0] - 2025-12-16
 
@@ -1276,7 +1287,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-**Version**: 1.8.3  
+**Version**: 1.8.4  
 **Last Updated**: 2025-12-16  
 **Port**: 52052 (NAS host port → API container :8000)
 

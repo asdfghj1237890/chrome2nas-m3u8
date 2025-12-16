@@ -103,7 +103,7 @@ Chrome Extension → NAS Docker (API + Worker) → Video Storage
 webvideo2nas/
 ├── chrome-extension/  # Chrome extension source
 ├── docs/              # Documentation
-├── m3u8-downloader/   # NAS downloader (Docker stack)
+├── video-downloader/  # NAS downloader (Docker stack)
 │   └── docker/        # Docker services (API + Worker)
 ├── pics/              # Diagrams used by README
 └── README.md          # This file
@@ -157,10 +157,10 @@ cd docker
 unzip ../WebVideo2NAS-downloader-docker.zip
 
 # Verify directory structure
-ls -la m3u8-downloader/
+ls -la video-downloader/
 # Should show: docker/, db_data/, logs/, redis_data/
 
-cd m3u8-downloader/docker
+cd video-downloader/docker
 ```
 
 ##### 2. Configure Environment
@@ -205,8 +205,8 @@ docker-compose up -d
 curl http://localhost:52052/api/health
 
 # View logs
-docker logs m3u8_api
-docker logs m3u8_worker_1
+docker logs video_api
+docker logs video_worker_1
 ```
 
 ##### 6. Install Chrome Extension
@@ -259,7 +259,7 @@ sudo chown -R 1026:100 /volume1/xxxxx/downloads
 3. Extract the ZIP file in `/volume1/docker/`
 4. Verify the structure:
    ```
-   /volume1/docker/m3u8-downloader/
+   /volume1/docker/video-downloader/
    ├── docker/          # Contains docker-compose files
    ├── db_data/         # Database data directory
    ├── logs/            # Application logs directory
@@ -274,12 +274,12 @@ unzip WebVideo2NAS-downloader-docker.zip
 rm WebVideo2NAS-downloader-docker.zip
 
 # Set proper permissions
-sudo chown -R 1026:100 /volume1/docker/m3u8-downloader
+sudo chown -R 1026:100 /volume1/docker/video-downloader
 ```
 
 ##### Step 5: Configure Environment
 ```bash
-cd /volume1/docker/m3u8-downloader/docker
+cd /volume1/docker/video-downloader/docker
 
 # Create .env file and setup the value as you want
 cat > .env << 'EOF'
@@ -308,17 +308,17 @@ sudo nano .env
 ##### Step 6: Deploy on Synology
 **Option A: DSM UI (Container Manager → Projects import)**
 
-1. In `/volume1/docker/m3u8-downloader/docker/`, make sure the compose file is named `docker-compose.yml` (Container Manager Projects expects this filename).
+1. In `/volume1/docker/video-downloader/docker/`, make sure the compose file is named `docker-compose.yml` (Container Manager Projects expects this filename).
    - If `docker-compose.yml` already exists, move it aside (e.g. rename to `docker-compose.non-synology.yml`)
    - Rename `docker-compose.synology.yml` to `docker-compose.yml`
 2. Open **Container Manager** → **Projects** → **Create**
-3. Select the project folder: `/volume1/docker/m3u8-downloader/docker`
+3. Select the project folder: `/volume1/docker/video-downloader/docker`
 4. Finish the wizard and start the project
 
 **Option B: SSH (docker-compose)**
 
 ```bash
-cd /volume1/docker/m3u8-downloader/docker
+cd /volume1/docker/video-downloader/docker
 
 # Start services
 sudo docker-compose -f docker-compose.synology.yml up -d
@@ -327,8 +327,8 @@ sudo docker-compose -f docker-compose.synology.yml up -d
 sudo docker ps
 
 # View logs
-sudo docker logs m3u8_api
-sudo docker logs m3u8_worker
+sudo docker logs video_api
+sudo docker logs video_worker_1
 ```
 
 ##### Step 7: Configure Firewall
@@ -362,7 +362,7 @@ cd docker
 unzip ../WebVideo2NAS-downloader-docker.zip
 
 # Navigate to docker configuration
-cd m3u8-downloader/docker
+cd video-downloader/docker
 
 # Deploy
 docker-compose up -d
@@ -441,10 +441,10 @@ curl http://YOUR_NAS_IP:52052/api/jobs \
 ##### Test 4: Monitor Workers
 ```bash
 # View real-time logs from both workers
-docker logs -f m3u8_worker_1
+docker logs -f video_worker_1
 
 # Check worker2
-docker logs -f m3u8_worker_2
+docker logs -f video_worker_2
 
 # Check for completed downloads
 ls -lh /volume1/xxxxx/downloads/completed/
@@ -496,7 +496,7 @@ curl http://YOUR_NAS_IP:52052/api/health
 ##### Issue: Downloads Fail
 ```bash
 # Check worker logs
-docker logs m3u8_worker
+docker logs video_worker_1
 
 # Common causes:
 # 1. Invalid M3U8 URL
@@ -513,7 +513,7 @@ ls -ld /volume1/xxxxx/downloads/
 **Check System Resources**
 ```bash
 # CPU and memory usage for all workers
-docker stats m3u8_worker_1 m3u8_worker_2
+docker stats video_worker_1 video_worker_2
 
 # Adjust settings in .env (per-video parallelism)
 MAX_DOWNLOAD_WORKERS=5      # Reduce per-video threads
@@ -524,7 +524,7 @@ FFMPEG_THREADS=2            # Reduce FFmpeg threads
 If your NAS is struggling with 2 workers:
 ```bash
 # Stop worker2
-docker stop m3u8_worker_2
+docker stop video_worker_2
 
 # Or remove it from docker-compose.yml and restart
 docker-compose up -d
@@ -566,12 +566,12 @@ worker3:
   build:
     context: ./worker
     dockerfile: Dockerfile
-  container_name: m3u8_worker_3
+  container_name: video_worker_3
   restart: unless-stopped
   env_file:
     - .env
   environment:
-    - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/m3u8_db
+    - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/video_db
     - REDIS_URL=redis://redis:6379/0
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - MAX_DOWNLOAD_WORKERS=${MAX_DOWNLOAD_WORKERS:-10}
@@ -586,7 +586,7 @@ worker3:
     redis:
       condition: service_healthy
   networks:
-    - m3u8_network
+    - video_network
 ```
 
 Then restart:
@@ -605,8 +605,8 @@ FFMPEG_THREADS=4
 **Reduce to 1 worker** - Remove `worker2` from docker-compose.yml:
 ```bash
 # OR stop worker2:
-docker stop m3u8_worker_2
-docker rm m3u8_worker_2
+docker stop video_worker_2
+docker rm video_worker_2
 ```
 
 Then adjust settings:
@@ -621,11 +621,11 @@ FFMPEG_THREADS=2
 docker-compose logs -f worker worker2
 
 # View specific worker
-docker logs -f m3u8_worker_1
-docker logs -f m3u8_worker_2
+docker logs -f video_worker_1
+docker logs -f video_worker_2
 
 # Check resource usage
-docker stats m3u8_worker_1 m3u8_worker_2
+docker stats video_worker_1 video_worker_2
 ```
 
 #### Security Best Practices (Installation Guide)
@@ -951,7 +951,7 @@ git checkout -b fix/your-bug-fix
 
 **Backend (Docker Services):**
 ```bash
-cd m3u8-downloader/docker
+cd video-downloader/docker
 docker-compose up --build
 # Test API endpoints
 ./test-api.sh
@@ -1129,7 +1129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### [1.8.1] - 2025-12-16
 
 #### Changed
-- Rename `m3u8-downloader/` directory to `video-downloader/` and update related docs/config references
+- Rename downloader directory to `video-downloader/` and update related docs/config references
 
 ### [1.8.0] - 2025-12-16
 
